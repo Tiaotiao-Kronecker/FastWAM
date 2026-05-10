@@ -20,6 +20,8 @@ docs/<category>/YYYY-MM-DD-short-topic.md
 
 ## Update Rules
 
+- 每次回答问题都要说明当前计划或行为的动机、原因。
+- 每次分析问题都要从第一性原理出发，先明确目标、约束和基本事实，再给出推理与结论。
 - 只要完成了非平凡修改或排查，就更新或新增一条 `docs/worklog/`。
 - 用户提出的问题、关键决策或容易反复问到的结论，归档到 `docs/qa/`。
 - 涉及多步任务、实验流程、训练/评测路线时，归档到 `docs/plan/`。
@@ -36,3 +38,16 @@ docs/<category>/YYYY-MM-DD-short-topic.md
 - `docs/qa/2026-05-09-fastwam-docs-qa.md`
 
 这里的 one-step 指把常用训练、预处理和评测入口收敛到可直接复制执行的命令，主要基于 `README_zh.md`、`configs/sim_libero.yaml`、`configs/sim_robotwin.yaml` 和 `scripts/train_zero1.sh`。
+
+## One-Step Diffusion Context
+
+FastWAM one-step diffusion / one-step flow-matching 的分析归档见：
+
+- `docs/plan/2026-05-10-fastwam-one-step-diffusion-plan.md`
+- `docs/qa/2026-05-10-fastwam-one-step-diffusion-qa.md`
+- `docs/worklog/2026-05-10-fastwam-one-step-diffusion-worklog.md`
+
+注意区分两类 one-step：
+
+- `one-step 工作流`：把准备、训练、评测命令模板化。
+- `one-step diffusion`：把当前多步 flow-matching 推理压缩到单步采样或单步学生模型。
