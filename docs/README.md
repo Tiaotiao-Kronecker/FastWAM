@@ -14,3 +14,4 @@
 - `plan/2026-05-10-fastwam-one-step-diffusion-plan.md`：FastWAM one-step diffusion / one-step flow-matching 技术路线。
 - `qa/2026-05-10-fastwam-one-step-diffusion-qa.md`：one-step diffusion 相关问答整理。
 - `worklog/2026-05-10-fastwam-one-step-diffusion-worklog.md`：本次 one-step diffusion 归档工作记录。
+- `worklog/2026-05-10-fastwam-one-step-diffusion-phase0-worklog.md`：Phase 0 baseline 启动记录。

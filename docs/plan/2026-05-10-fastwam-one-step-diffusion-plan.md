@@ -46,7 +46,17 @@
 
 目标：量化现有 checkpoint 直接减少采样步数的退化曲线。
 
-要跑的对照：
+推荐使用脚本：
+
+```bash
+CKPT={ckpt_path} \
+STATS={stats_path} \
+NUM_GPUS={num_gpus} \
+STEPS="1 2 4 10" \
+bash scripts/run_one_step_diffusion_baseline.sh robotwin
+```
+
+也可以手动运行单组对照：
 
 ```bash
 python experiments/robotwin/run_robotwin_manager.py \
@@ -72,6 +82,11 @@ num_inference_steps = 1, 2, 4, 10
 - seed、checkpoint、dataset stats、评测配置
 
 预期：1-step sampler 可能明显掉点，但它给后续蒸馏提供必须的 baseline。
+
+执行状态：
+
+- 2026-05-10：已新增 `scripts/run_one_step_diffusion_baseline.sh`。
+- 2026-05-10：当前本地缺少 `checkpoints/` 和 `data/`，尚未实际跑评测。
 
 ### Phase 1：action-only endpoint 微调
 
