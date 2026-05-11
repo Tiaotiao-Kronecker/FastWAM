@@ -129,3 +129,61 @@ release_1, clean, 8 tasks, GPU 0-7
 ```
 
 截至启动检查，worker 已进入 episode 阶段，`click_alarmclock` 已开始输出 success rate。
+
+## Final Status
+
+quick compare 已完成：
+
+```text
+manager log: evaluate_results/robotwin_quick_one_step_compare/20260511_quick_clean20/manager.log
+summary csv: evaluate_results/robotwin_quick_one_step_compare/20260511_quick_clean20/summary.csv
+summary json: evaluate_results/robotwin_quick_one_step_compare/20260511_quick_clean20/summary.json
+failed jobs: evaluate_results/robotwin_quick_one_step_compare/20260511_quick_clean20/failed_jobs.txt
+```
+
+结束标记：
+
+```text
+[2026-05-11 20:11:06] quick compare finished
+```
+
+`failed_jobs.txt` 为 0 字节，32 个 planned jobs 全部完成。
+
+## Final Results
+
+Aggregate success rate:
+
+| group | completed tasks | mean success |
+| --- | ---: | ---: |
+| release_1 | 8/8 | 0.9250 |
+| release_4 | 8/8 | 0.9875 |
+| release_10 | 8/8 | 0.9750 |
+| endpoint_1 | 8/8 | 0.1937 |
+
+Per-task success rate:
+
+| task | release_1 | release_4 | release_10 | endpoint_1 |
+| --- | ---: | ---: | ---: | ---: |
+| click_bell | 1.00 | 1.00 | 1.00 | 0.70 |
+| click_alarmclock | 1.00 | 0.95 | 1.00 | 0.35 |
+| adjust_bottle | 1.00 | 1.00 | 1.00 | 0.20 |
+| grab_roller | 1.00 | 1.00 | 1.00 | 0.30 |
+| beat_block_hammer | 0.65 | 1.00 | 1.00 | 0.00 |
+| dump_bin_bigbin | 0.95 | 0.95 | 0.95 | 0.00 |
+| blocks_ranking_size | 0.80 | 1.00 | 0.85 | 0.00 |
+| stack_blocks_two | 1.00 | 1.00 | 1.00 | 0.00 |
+
+## Interpretation
+
+从第一性原理看，one-step 对比要分清两个问题：
+
+1. release checkpoint 用 `num_inference_steps=1` 做采样，本质上仍使用原始 diffusion/flow 模型，只是减少推理步数。
+2. `endpoint_1` 使用 action-only endpoint fine-tune 的 10-step checkpoint，本质上是在训练一个直接动作端点映射。
+
+这轮结果说明：
+
+- release checkpoint 的 1-step sampler 在 clean quick subset 上已经很强，均值达到 0.9250。
+- release 4-step 和 10-step 是当天 quick subset 的近似上界，分别为 0.9875 和 0.9750。
+- 当前 10-step endpoint/action direct fine-tune 明显不足，均值只有 0.1937，未超过 release 1-step baseline。
+
+因此，当前结果不否定 one-step diffusion / flow matching 方向；它只说明“10-step action-only endpoint fine-tune”不是一个足够强的初步方法。下一步应优先实现并训练计划中的 `shortcut_1` 和 `meanflow_1`，再用完全相同的 quick task set 横向比较。

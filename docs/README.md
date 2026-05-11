@@ -14,6 +14,7 @@
 - `plan/2026-05-10-fastwam-one-step-diffusion-plan.md`：FastWAM one-step diffusion / one-step flow-matching 技术路线。
 - `plan/2026-05-11-fastwam-one-day-quick-one-step-compare-plan.md`：一天内获取 one-step 对比初步结果的快速实验计划。
 - `qa/2026-05-10-fastwam-one-step-diffusion-qa.md`：one-step diffusion 相关问答整理。
+- `qa/2026-05-11-fastwam-quick-one-step-results-qa.md`：quick compare 结束状态、结果解释与下一步问答。
 - `worklog/2026-05-10-fastwam-one-step-diffusion-worklog.md`：本次 one-step diffusion 归档工作记录。
 - `worklog/2026-05-10-fastwam-one-step-diffusion-phase0-worklog.md`：Phase 0 baseline 启动记录。
 - `worklog/2026-05-11-fastwam-assets-download-worklog.md`：checkpoint、dataset stats、LIBERO/RoboTwin 数据下载记录。
