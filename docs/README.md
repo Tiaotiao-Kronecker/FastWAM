@@ -17,3 +17,4 @@
 - `worklog/2026-05-10-fastwam-one-step-diffusion-phase0-worklog.md`：Phase 0 baseline 启动记录。
 - `worklog/2026-05-11-fastwam-assets-download-worklog.md`：checkpoint、dataset stats、LIBERO/RoboTwin 数据下载记录。
 - `worklog/2026-05-11-fastwam-one-step-action-finetune-worklog.md`：action-only one-step endpoint fine-tune 实现与验证记录。
+- `worklog/2026-05-11-robotwin-release-baseline-worklog.md`：RoboTwin release checkpoint baseline 环境修复、smoke 和完整评测启动记录。
