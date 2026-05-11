@@ -186,3 +186,9 @@ Student：
 - 新 model/task config。
 - 一个最小 smoke test 或 dry-run 脚本。
 - 一份新的 `docs/worklog/YYYY-MM-DD-fastwam-one-step-diffusion-implementation.md` 记录实验结果。
+
+## 执行状态
+
+2026-05-11 已开始 Phase 1 action-only one-step endpoint fine-tune，实现和验证记录见：
+
+- `docs/worklog/2026-05-11-fastwam-one-step-action-finetune-worklog.md`

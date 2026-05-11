@@ -62,10 +62,16 @@ class Wan22Trainer:
             step_scheduler_with_optimizer=False,
         )
         
+        deepspeed_plugin = getattr(self.accelerator.state, "deepspeed_plugin", None)
+        deepspeed_config = getattr(deepspeed_plugin, "deepspeed_config", None)
+        zero_stage = "none"
+        if isinstance(deepspeed_config, dict):
+            zero_stage = deepspeed_config.get("zero_optimization", {}).get("stage", "unknown")
+
         logger.info(
             "Accelerate training: distributed_type=%s zero_stage=%s world_size=%d process_index=%d cfg_mixed_precision=%s accelerator_mixed_precision=%s grad_accum=%d grad_clip=%.4f",
             self.accelerator.distributed_type,
-            self.accelerator.state.deepspeed_plugin.deepspeed_config.get("zero_optimization", {}).get("stage", "unknown"),
+            zero_stage,
             self.accelerator.num_processes,
             self.accelerator.process_index,
             self.mixed_precision,
@@ -82,10 +88,12 @@ class Wan22Trainer:
         # Freeze non-trainable modules before optimizer/deepspeed initialization.
         # This keeps DiT (+ optional proprio encoder) as trainable when ZeRO builds optimizer state.
         self._apply_dit_only_train_mode(self.model)
-        trainable_params = list(self.model.dit.parameters())
+        trainable_params = [p for p in self.model.dit.parameters() if p.requires_grad]
         proprio_encoder = getattr(self.model, "proprio_encoder", None)
         if proprio_encoder is not None:
-            trainable_params.extend(list(proprio_encoder.parameters()))
+            trainable_params.extend([p for p in proprio_encoder.parameters() if p.requires_grad])
+        if not trainable_params:
+            raise ValueError("No trainable parameters found after applying train-mode policy.")
         self.optimizer = torch.optim.AdamW(
             trainable_params,
             lr=self.learning_rate,
@@ -293,6 +301,9 @@ class Wan22Trainer:
         if proprio_encoder is not None:
             proprio_encoder.train()
             proprio_encoder.requires_grad_(True)
+        configure_trainable_parameters = getattr(model, "configure_trainable_parameters", None)
+        if callable(configure_trainable_parameters):
+            configure_trainable_parameters()
 
     @staticmethod
     def _to_batched_eval_sample(sample):
@@ -690,7 +701,11 @@ class Wan22Trainer:
                         global_loss_metrics[key] = float(
                             self.accelerator.gather(metric_tensor).mean().item()
                         )
-                    grad_norm_tensor = torch.tensor(grad_norm, device=loss.device, dtype=torch.float32)
+                    grad_norm_tensor = torch.as_tensor(
+                        grad_norm,
+                        device=loss.device,
+                        dtype=torch.float32,
+                    ).reshape(1)
                     global_grad_norm = float(self.accelerator.gather(grad_norm_tensor).mean().item())
 
                     current_lr = float(self.optimizer.param_groups[0]["lr"])

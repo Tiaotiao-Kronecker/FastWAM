@@ -15,3 +15,5 @@
 - `qa/2026-05-10-fastwam-one-step-diffusion-qa.md`：one-step diffusion 相关问答整理。
 - `worklog/2026-05-10-fastwam-one-step-diffusion-worklog.md`：本次 one-step diffusion 归档工作记录。
 - `worklog/2026-05-10-fastwam-one-step-diffusion-phase0-worklog.md`：Phase 0 baseline 启动记录。
+- `worklog/2026-05-11-fastwam-assets-download-worklog.md`：checkpoint、dataset stats、LIBERO/RoboTwin 数据下载记录。
+- `worklog/2026-05-11-fastwam-one-step-action-finetune-worklog.md`：action-only one-step endpoint fine-tune 实现与验证记录。
