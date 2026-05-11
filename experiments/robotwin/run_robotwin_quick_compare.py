@@ -91,6 +91,7 @@ class GroupConfig:
     ckpt: Path
     stats: Path
     steps: int
+    task_config: str | None = None
 
     @property
     def ckpt_tag(self) -> str:
@@ -136,11 +137,24 @@ def _build_groups() -> dict[str, GroupConfig]:
             "./runs/robotwin_one_step_action_10step/checkpoints/weights/step_000010.pt",
         )
     )
+    shortcut_ckpt = _resolve_path(
+        os.environ.get(
+            "SHORTCUT_CKPT",
+            "./runs/robotwin_one_step_shortcut_10step/checkpoints/weights/step_000010.pt",
+        )
+    )
     groups = {
         "release_1": GroupConfig("release_1", release_ckpt, stats, 1),
         "release_4": GroupConfig("release_4", release_ckpt, stats, 4),
         "release_10": GroupConfig("release_10", release_ckpt, stats, 10),
         "endpoint_1": GroupConfig("endpoint_1", endpoint_ckpt, stats, 1),
+        "shortcut_1": GroupConfig(
+            "shortcut_1",
+            shortcut_ckpt,
+            stats,
+            1,
+            os.environ.get("SHORTCUT_TASK", "robotwin_one_step_shortcut_3cam_384_1e-4"),
+        ),
     }
     return groups
 
@@ -224,10 +238,11 @@ def main() -> None:
         return sum(1 for item in running if item.gpu_id == gpu_id and item.process.poll() is None)
 
     def build_cmd(job: EvalJob, gpu_id: int) -> list[str]:
+        task_config = job.group.task_config or task_config_name
         return [
             sys.executable,
             str(SINGLE_ENTRY),
-            f"task={task_config_name}",
+            f"task={task_config}",
             f"ckpt={str(job.group.ckpt)}",
             f"gpu_id={gpu_id}",
             f"EVALUATION.task_name={job.task_name}",

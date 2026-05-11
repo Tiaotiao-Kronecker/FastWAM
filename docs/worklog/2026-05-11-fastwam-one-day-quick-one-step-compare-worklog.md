@@ -22,7 +22,7 @@
 当前代码状态：
 
 - endpoint/action direct fine-tune 已实现并有 checkpoint。
-- shortcut 尚未实现。
+- shortcut 已实现并有 10-step smoke checkpoint。
 - mean-flow 尚未实现。
 
 因此当天先执行 `release-1/4/10 + endpoint-1`，后续在 shortcut / mean-flow 实现后同配置补跑。

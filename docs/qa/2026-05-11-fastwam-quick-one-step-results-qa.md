@@ -54,3 +54,45 @@ release checkpoint 的 `num_inference_steps=1` 并不是重新训练出来的 on
 - `meanflow_1`
 
 然后用同一套 quick task set 复跑，这样结果才可横向比较。若 endpoint/action direct 还要保留，应先把训练步数显著增加，再判断是否值得扩大到 full benchmark。
+
+## Q: 为什么 endpoint fine-tune 里的 velocity loss 和 endpoint loss 在 `sigma=1` 时等价？
+
+当前 action flow 的定义是：
+
+```text
+x_sigma = (1 - sigma) * action + sigma * noise
+target_velocity = noise - action
+pred_endpoint = x_sigma - sigma * pred_velocity
+```
+
+把 `pred_endpoint` 减去真实 action：
+
+```text
+pred_endpoint - action
+= (1 - sigma) * action + sigma * noise - sigma * pred_velocity - action
+= sigma * (noise - action - pred_velocity)
+= sigma * (target_velocity - pred_velocity)
+```
+
+因此：
+
+```text
+MSE(pred_endpoint, action)
+= sigma^2 * MSE(pred_velocity, target_velocity)
+```
+
+当 `sigma=1` 时，两项完全是同一个误差：
+
+```text
+MSE(pred_endpoint, action)
+= MSE(pred_velocity, noise - action)
+```
+
+所以当前 endpoint 训练里的
+
+```text
+0.5 * MSE(pred_velocity, noise - action)
++ 0.5 * MSE(pred_endpoint, action)
+```
+
+在固定 `sigma=1` 时不会提供两个独立监督信号，本质上就是同一个 velocity 约束。保留 endpoint loss 的价值主要是让日志直接暴露 action endpoint 误差，并为后续混合 timestep 或改成独立 endpoint head 留接口。

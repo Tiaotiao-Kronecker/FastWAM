@@ -25,10 +25,10 @@
 当前代码状态：
 
 - endpoint/action direct fine-tune 已实现并已有 quick checkpoint。
-- shortcut 未实现。
+- shortcut 已实现并已有 10-step smoke checkpoint，可进入同 task set quick eval。
 - mean-flow 未实现。
 
-当天执行策略是先跑 `release-1/4/10 + endpoint-1`，并把 `shortcut-1/meanflow-1` 作为方法实现后的同配置补跑项。
+当天已先跑 `release-1/4/10 + endpoint-1`；后续把 `shortcut-1/meanflow-1` 作为方法实现后的同配置补跑项。`shortcut-1` 当前已具备补跑条件。
 
 ## Quick Task Set
 
