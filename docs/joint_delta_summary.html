@@ -1,0 +1,1424 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FastWAM Joint Delta MeanFlow 总结</title>
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['\\[', '\\]']] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --paper: #ffffff;
+      --ink: #172033;
+      --muted: #596579;
+      --line: #dfe5ee;
+      --accent: #1769aa;
+      --accent-soft: #e8f2fb;
+      --good: #18794e;
+      --warn: #a15c00;
+      --bad: #b42318;
+      --code: #102a43;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC",
+        "Microsoft YaHei", Arial, sans-serif;
+      overflow-x: hidden;
+    }
+
+    header {
+      background: #0f2438;
+      color: #fff;
+      padding: 40px 24px 30px;
+      border-bottom: 1px solid #0b1b2b;
+    }
+
+    .wrap {
+      max-width: 1120px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 32px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: #c7d8e8;
+      font-size: 16px;
+    }
+
+    main {
+      max-width: 1120px;
+      margin: 24px auto 56px;
+      padding: 0 24px;
+    }
+
+    section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 24px;
+      margin: 18px 0;
+      box-shadow: 0 1px 2px rgba(16, 42, 67, 0.04);
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 22px;
+      line-height: 1.3;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 22px 0 10px;
+      font-size: 17px;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    p { margin: 10px 0; }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover { text-decoration: underline; }
+
+    .lead {
+      font-size: 16px;
+      color: #253044;
+    }
+
+    .muted { color: var(--muted); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .callout {
+      border: 1px solid #bfdbfe;
+      background: var(--accent-soft);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin: 14px 0;
+    }
+
+    .callout strong { color: #0b4f82; }
+
+    .note {
+      border-left: 4px solid var(--accent);
+      background: #f6fbff;
+      padding: 12px 14px;
+      margin: 14px 0;
+      color: #233047;
+    }
+
+    .formula {
+      border: 1px solid var(--line);
+      background: #fbfcff;
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin: 12px 0;
+      overflow-x: auto;
+      max-width: 100%;
+    }
+
+    .formula mjx-container {
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+
+    table {
+      width: 100%;
+      max-width: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+      margin: 12px 0 18px;
+      font-size: 14px;
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      vertical-align: top;
+      text-align: left;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    th {
+      background: #eef3f9;
+      font-weight: 650;
+    }
+
+    td.num, th.num { text-align: right; white-space: nowrap; }
+
+    .tag {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      line-height: 1.5;
+      font-weight: 650;
+      background: #eef3f9;
+      color: #344054;
+      border: 1px solid #d7dee8;
+    }
+
+    .tag.good { color: var(--good); background: #ecfdf3; border-color: #abefc6; }
+    .tag.warn { color: var(--warn); background: #fff8e8; border-color: #f6d58b; }
+    .tag.bad { color: var(--bad); background: #fef3f2; border-color: #fecdca; }
+
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      color: var(--code);
+    }
+
+    code {
+      background: #eef3f9;
+      border: 1px solid #dfe5ee;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-size: 0.92em;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    pre {
+      max-width: 100%;
+      background: #0f172a;
+      color: #e5edf6;
+      border-radius: 12px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    pre code {
+      color: inherit;
+      background: transparent;
+      border: 0;
+      padding: 0;
+      white-space: pre-wrap;
+    }
+
+    ul {
+      margin: 8px 0 14px;
+      padding-left: 22px;
+    }
+
+    li { margin: 5px 0; }
+
+    .kpi {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 12px 0;
+    }
+
+    .kpi div {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      background: #fbfcff;
+    }
+
+    .kpi strong {
+      display: block;
+      font-size: 22px;
+      line-height: 1.25;
+    }
+
+    .small { font-size: 13px; color: var(--muted); }
+
+    @media (max-width: 800px) {
+      h1 { font-size: 26px; }
+      main { padding: 0 14px; }
+      section { padding: 18px; border-radius: 12px; }
+      .grid, .kpi { grid-template-columns: 1fr; }
+      table { font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>FastWAM Joint Delta MeanFlow 总结</h1>
+      <p class="subtitle">定义、实现方式、数据使用与当前实验结果，更新日期：2026-05-25</p>
+    </div>
+  </header>
+
+  <main>
+    <section id="summary">
+      <h2>结论摘要</h2>
+      <p class="lead">
+        <code>joint_delta</code> 是当前 FastWAM MeanFlow 路线里最稳定的一版区间条件器。
+        它不是新的完整 video/action joint 模型，而是在 release action policy 上增加一个小型残差条件器，
+        让动作分支同时看到当前噪声时间 \(t\)、目标起点 \(r\) 和区间长度 \(t-r\)。
+      </p>
+      <div class="kpi">
+        <div>
+          <span class="small">当前候选</span>
+          <strong>step_002000</strong>
+          <span class="small">joint_cond_fd_2k_20260522</span>
+        </div>
+        <div>
+          <span class="small">LIBERO full 4-suite</span>
+          <strong>95.90%</strong>
+          <span class="small">2000 trials, 1-step inference</span>
+        </div>
+        <div>
+          <span class="small">相对 release_1</span>
+          <strong>+0.10</strong>
+          <span class="small">overall points</span>
+        </div>
+        <div>
+          <span class="small">相对 release_10</span>
+          <strong>-0.90</strong>
+          <span class="small">overall points</span>
+        </div>
+      </div>
+      <div class="callout">
+        <strong>核心判断：</strong>
+        当前最可解释的成功因素不是训练更多 action expert 参数，而是尽量保留 release policy，
+        只训练一个零初始化的 MeanFlow 区间条件器。这个设计在 <code>libero_10</code> 上比
+        <code>release_1</code> 高 1.40 points，但 full average 仍略低于 <code>release_10</code>。
+      </div>
+    </section>
+
+    <section id="release">
+      <h2>Release 1/10 对照关系</h2>
+      <p>
+        <code>release_1</code> 和 <code>release_10</code> 使用同一个 release checkpoint：
+        <code>checkpoints/fastwam_release/libero_uncond_2cam224.pt</code>，以及同一个
+        <code>libero_uncond_2cam224_dataset_stats.json</code>。二者不是不同训练版本，
+        只是在动作 denoise 时设置不同的 <code>num_inference_steps</code>。
+      </p>
+      <div class="formula">
+        \[
+        \text{release}_k =
+        \operatorname{Eval}\left(\theta_{\text{release}},\ \text{num\_inference\_steps}=k\right),
+        \quad k \in \{1,10\}
+        \]
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th class="num">steps</th>
+            <th class="num">Spatial</th>
+            <th class="num">Object</th>
+            <th class="num">Goal</th>
+            <th class="num">LIBERO-10</th>
+            <th class="num">Overall</th>
+            <th>输出目录</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>release_1</code></td>
+            <td class="num">1</td>
+            <td class="num">96.60</td>
+            <td class="num">99.20</td>
+            <td class="num">95.20</td>
+            <td class="num">92.20</td>
+            <td class="num">95.80</td>
+            <td><code>evaluate_results/libero/release_baseline_20260512_steps1</code></td>
+          </tr>
+          <tr>
+            <td><code>release_10</code></td>
+            <td class="num">10</td>
+            <td class="num">97.80</td>
+            <td class="num">99.40</td>
+            <td class="num">95.40</td>
+            <td class="num">94.60</td>
+            <td class="num">96.80</td>
+            <td><code>evaluate_results/libero/release_baseline_20260512_steps10_v2</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="small">
+        RoboTwin quick clean20 也验证过 release step gap：<code>release_1</code> 平均 92.50%，
+        <code>release_10</code> 平均 97.50%，任务数 8，每任务 20 episodes。
+        当前 <code>joint_delta</code> 微调和正式 readout 主要在 LIBERO 上完成。
+      </p>
+    </section>
+
+    <section id="flow-matching-first">
+      <h2>1. Flow Matching 原理与 FastWAM 实现</h2>
+      <p>
+        先从最基础的 Flow Matching 看。训练时我们从数据集中取一个干净动作 chunk \(a_0\)，再采一个高斯噪声
+        \(\epsilon_a\)。下文把归一化噪声强度直接记作 \(t\in[0,1]\)；代码里对应
+        <code>timestep / num_train_timesteps</code>。
+      </p>
+      <div class="formula">
+        \[
+        a_t=(1-t)a_0+t\epsilon_a
+        \]
+      </div>
+      <p>
+        这里的 \(a_0\) 和 \(\epsilon_a\) 对一个训练样本来说是固定的，只有 \(t\) 在变。所以对 \(t\) 求导时：
+      </p>
+      <div class="formula">
+        \[
+        \frac{d a_t}{dt}
+        =
+        \frac{d}{dt}\left[(1-t)a_0+t\epsilon_a\right]
+        =
+        -a_0+\epsilon_a
+        =
+        \epsilon_a-a_0
+        =
+        v_a
+        \]
+      </div>
+      <p>
+        这就是为什么 \(\frac{d a_t}{dt}=v_a\)。它不是模型假设出来的，而是线性噪声路径本身的导数。
+        Flow Matching 要模型学习这个瞬时速度 \(v_a\)：
+      </p>
+      <div class="formula">
+        \[
+        v_a = \epsilon_a-a_0,\qquad
+        \mathcal{L}_{\text{FM-action}}
+        =
+        w(t)\left\|v_{\theta,a}(a_t,t)-v_a\right\|_2^2
+        \]
+      </div>
+      <p>
+        对 video latent \(z_0\) 也是同样的过程：
+      </p>
+      <div class="formula">
+        \[
+        z_t=(1-t)z_0+t\epsilon_z,\qquad
+        v_z=\epsilon_z-z_0
+        \]
+        \[
+        \mathcal{L}_{\text{FM}}
+        =
+        \lambda_z w(t_z)\left\|v_{\theta,z}(z_t,t_z)-v_z\right\|_2^2
+        +
+        \lambda_a w(t_a)\left\|v_{\theta,a}(a_t,t_a)-v_a\right\|_2^2
+        \]
+      </div>
+      <p>
+        FastWAM 的实现入口是 <a href="../src/fastwam/models/wan22/fastwam.py"><code>FastWAM.training_loss()</code></a>。
+        <code>WanContinuousFlowMatchScheduler</code> 会先用 shift 函数采样训练时间：
+      </p>
+      <div class="formula">
+        \[
+        \sigma=\phi(u;s)=\frac{s u}{1+(s-1)u},\qquad u\sim\mathcal{U}(0,1),\quad s=5
+        \]
+      </div>
+      <p>
+        然后 <code>add_noise()</code> 构造 \((1-\sigma)x+\sigma\epsilon\)，
+        <code>training_target()</code> 返回 \(\epsilon-x\)。推理时从噪声开始，用 Euler 更新从高噪声走到低噪声：
+      </p>
+      <div class="formula">
+        \[
+        1=\sigma_0>\sigma_1>\cdots>\sigma_K=0,\qquad
+        \Delta_i=\sigma_{i+1}-\sigma_i<0
+        \]
+        \[
+        x_{\sigma_{i+1}}
+        =
+        x_{\sigma_i}+v_\theta(x_{\sigma_i},\sigma_i)\Delta_i
+        \]
+      </div>
+      <p>
+        因为 \(\Delta_i<0\)，这一步实际是在沿预测速度的反方向从噪声回到数据。
+        <code>release_1</code> 就是 \(K=1\)，<code>release_10</code> 就是 \(K=10\)。
+      </p>
+    </section>
+
+    <section id="meanflow-principle">
+      <h2>2. MeanFlow 原理</h2>
+      <p>
+        Flow Matching 学的是某个时间点的瞬时速度 \(v_\theta(a_t,t)\)。MeanFlow 换一个视角：
+        它希望模型直接输出从 \(t\) 到 \(r\) 这一整个区间的平均速度。下面为了简洁，把 action path 的
+        \(v_a\) 记为 \(v\)。
+      </p>
+      <div class="formula">
+        \[
+        u_\theta(a_t,r,t\mid I,q,p)
+        \approx
+        \frac{a_t-a_r}{t-r}
+        \]
+      </div>
+      <p>
+        这个式子说明 \(u_\theta\) 的物理含义：如果平均速度正确，从 \(a_t\) 一步走长度 \(t-r\)，
+        应该到达 \(a_r\)：
+      </p>
+      <div class="formula">
+        \[
+        a_r\approx a_t-(t-r)u_\theta(a_t,r,t)
+        \]
+      </div>
+      <p>
+        这个平均速度定义和导数项有直接关系。把理想平均速度写成
+        \((t-r)u(a_t,r,t)=a_t-a_r\)，固定 \(r\)，对终点时间 \(t\) 求导：
+      </p>
+      <div class="formula">
+        \[
+        \frac{d}{dt}\left[(t-r)u(a_t,r,t)\right]
+        =
+        \frac{d a_t}{dt}
+        =
+        v
+        \]
+        \[
+        u(a_t,r,t)+(t-r)\frac{d u(a_t,r,t)}{dt}=v
+        \]
+        \[
+        u(a_t,r,t)=v-(t-r)\frac{d u(a_t,r,t)}{dt}
+        \]
+      </div>
+      <p>
+        最后一行就是 MeanFlow identity。训练时真实 \(v=\epsilon_a-a_0\) 是已知的，因为 noisy action
+        是我们用 \(a_0\) 和 \(\epsilon_a\) 构造出来的；模型则通过这个 identity 学会直接预测区间平均速度。
+      </p>
+      <div class="formula">
+        \[
+        u_{\text{target}}
+        =
+        v-(t-r)\frac{d u_\theta(a_t,r,t)}{dt}
+        \]
+        \[
+        \mathcal{L}_{\text{mf}}
+        =
+        \left\|
+        u_\theta(a_t,r,t)-\operatorname{sg}(u_{\text{target}})
+        \right\|_2^2
+        \]
+      </div>
+      <p>
+        一步动作生成时取 \(r=0,t=1\)，从随机噪声动作 \(a_1\) 直接预测 \(a_0\)：
+      </p>
+      <div class="formula">
+        \[
+        \hat a_0=a_1-u_\theta(a_1,0,1)
+        \]
+      </div>
+    </section>
+
+    <section id="meanflow-finite-difference">
+      <h2>3. MeanFlow 的 JVP 与 Finite Difference 版本</h2>
+      <p>
+        MeanFlow target 的难点是 \(\frac{d u_\theta}{dt}\)。这个导数是沿噪声路径的全导数：
+        \(t\) 改变时，输入 action \(a_t\) 也必须一起改变。
+      </p>
+      <div class="formula">
+        \[
+        \frac{d u_\theta(a_t,r,t)}{dt}
+        =
+        \frac{\partial u_\theta}{\partial a_t}\frac{d a_t}{dt}
+        +
+        \frac{\partial u_\theta}{\partial t}
+        =
+        J_{a}u_\theta\cdot v+\partial_t u_\theta
+        \]
+      </div>
+      <h3>JVP 版本</h3>
+      <p>
+        JVP 版本用自动微分直接算上面的全导数。实现上给 <code>torch.func.jvp</code> 的切向量是：
+      </p>
+      <div class="formula">
+        \[
+        \dot a_t=v,\qquad \dot t=1,\qquad \dot r=0
+        \]
+      </div>
+      <p>
+        它更贴近论文形式，但在当前 FastWAM/MoT 路径里显存和 checkpointing 约束更强，调试成本也更高。
+      </p>
+
+      <h3>Finite Difference 版本</h3>
+      <p>
+        当前 <code>joint_delta</code> 候选使用 finite difference。给定 \(\eta=0.05\)，
+        先沿同一条真实噪声路径退一步：
+      </p>
+      <div class="formula">
+        \[
+        a_{t-\eta}
+        =
+        (1-t+\eta)a_0+(t-\eta)\epsilon_a
+        =
+        a_t-\eta(\epsilon_a-a_0)
+        =
+        a_t-\eta v
+        \]
+      </div>
+      <p>
+        然后做两次普通 forward，分别计算 \((a_t,r,t)\) 和 \((a_{t-\eta},r,t-\eta)\) 的输出：
+      </p>
+      <div class="formula">
+        \[
+        \frac{d u_\theta}{dt}
+        \approx
+        \frac{
+          u_\theta(a_t,r,t)-
+          u_\theta(a_{t-\eta},r,t-\eta)
+        }{\eta}
+        \]
+      </div>
+      <p>
+        所以 finite difference 和 JVP 不是两个不同的 MeanFlow 目标；它们都在估计同一个
+        \(\frac{d u_\theta}{dt}\)。区别只是：JVP 用自动微分精确算当前模型的方向导数，
+        finite difference 用两个相邻时间点的输出差做数值近似。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>项目</th>
+            <th>Flow Matching release</th>
+            <th>MeanFlow JVP</th>
+            <th>MeanFlow finite difference</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>模型输出</td>
+            <td>瞬时速度 \(v_\theta(x_t,t)\)</td>
+            <td>区间平均速度 \(u_\theta(x_t,r,t)\)</td>
+            <td>区间平均速度 \(u_\theta(x_t,r,t)\)</td>
+          </tr>
+          <tr>
+            <td>导数项</td>
+            <td>不需要</td>
+            <td>JVP 自动微分</td>
+            <td>两次 forward 的差分近似</td>
+          </tr>
+          <tr>
+            <td>当前状态</td>
+            <td>release baseline</td>
+            <td>保留为研究路径</td>
+            <td><code>joint_delta step2000</code> 当前候选</td>
+          </tr>
+          <tr>
+            <td>训练范围</td>
+            <td>video/action 联合训练</td>
+            <td>可用于 MeanFlow action 或 joint 变体</td>
+            <td>只训练小型 <code>joint_delta</code> 条件器</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="math">
+      <h2>4. Joint Delta 条件器定义</h2>
+      <h3>Joint Delta 条件器</h3>
+      <p>
+        <code>joint_delta</code> 不是把新 token 拼到 action token 序列里，也不是改 MoT mixed attention。
+        它接在 action DiT 原始时间调制分支后面，给原始 <code>t_mod</code> 加一个由 MeanFlow 区间生成的 residual。
+      </p>
+
+      <h3>原始 action DiT 的时间调制</h3>
+      <p>
+        原始 action DiT 本身就有一条小网络把当前噪声时间 \(t\) 变成 time modulation。
+        这里 \(\phi(t)\) 是 sinusoidal timestep embedding，\(F\) 是 <code>freq_dim</code>，
+        \(H\) 是 <code>hidden_dim</code>：
+      </p>
+      <div class="formula">
+        \[
+        \phi(t)\in\mathbb{R}^{F}
+        \]
+        \[
+        h_t=E_{\text{time}}(\phi(t)),\qquad
+        E_{\text{time}}:\mathbb{R}^{F}\rightarrow\mathbb{R}^{H}
+        \]
+        \[
+        m(t)=P_{\text{time}}(h_t),\qquad
+        P_{\text{time}}:\mathbb{R}^{H}\rightarrow\mathbb{R}^{6H}
+        \]
+        \[
+        m(t)\in\mathbb{R}^{6\times H}
+        \]
+      </div>
+      <pre><code># src/fastwam/models/wan22/action_dit.py
+self.time_embedding = nn.Sequential(
+    nn.Linear(freq_dim, hidden_dim),
+    nn.SiLU(),
+    nn.Linear(hidden_dim, hidden_dim),
+)
+self.time_projection = nn.Sequential(
+    nn.SiLU(),
+    nn.Linear(hidden_dim, hidden_dim * 6),
+)
+
+t = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, timestep))
+t_mod = self.time_projection(t).unflatten(1, (6, self.hidden_dim))</code></pre>
+      <p>
+        所以原始时间调制本身就是网络：先用 <code>time_embedding</code> 把 sinusoidal 时间编码映射到
+        hidden 维，再用 <code>time_projection</code> 输出 \(6H\) 个调制参数。当前 action expert 中
+        <code>freq_dim=256</code>、<code>hidden_dim=1024</code>，因此
+        <code>t_mod</code> 的形状是 \([B,6,1024]\)。
+      </p>
+      <p>
+        <code>freq_dim</code> 的作用是决定 sinusoidal timestep embedding 的维度。原始时间输入只是一个标量
+        \(t\)，直接送进 MLP 表达力较弱；先展开成
+        \(\phi(t)\in\mathbb{R}^{\text{freq\_dim}}\)，等价于给时间提供一组从低频到高频的正弦/余弦坐标，
+        让网络更容易区分不同噪声时间并学习时间相关的非线性变化。
+      </p>
+      <div class="formula">
+        \[
+        t\in\mathbb{R}
+        \quad\rightarrow\quad
+        \phi(t)\in\mathbb{R}^{\text{freq\_dim}}
+        \quad\rightarrow\quad
+        h_t\in\mathbb{R}^{H}
+        \quad\rightarrow\quad
+        t_{\text{mod}}\in\mathbb{R}^{6\times H}
+        \]
+      </div>
+      <pre><code># action expert example
+freq_dim = 256
+hidden_dim = 1024
+
+scalar timestep t
+  -> sinusoidal_embedding_1d(freq_dim, t)  # [B, 256]
+  -> time_embedding MLP                    # [B, 1024]
+  -> time_projection                       # [B, 6 * 1024]
+  -> unflatten                             # [B, 6, 1024]</code></pre>
+      <p>
+        这 6 组参数在每个 DiT block 中被拆成 self-attention 和 MLP 的 shift、scale、gate：
+      </p>
+      <div class="formula">
+        \[
+        m(t)
+        \rightarrow
+        [s_{\text{msa}},\ c_{\text{msa}},\ g_{\text{msa}},\ s_{\text{mlp}},\ c_{\text{mlp}},\ g_{\text{mlp}}]
+        \]
+      </div>
+      <pre><code># src/fastwam/models/wan22/mot.py
+shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
+    block.modulation + t_mod
+).chunk(6, dim=chunk_dim)
+
+attn_input = modulate(block.norm1(x), shift_msa, scale_msa)
+...
+mlp_input = modulate(block.norm2(x), shift_mlp, scale_mlp)</code></pre>
+      <p>
+        因此 <code>t_mod</code> 不是普通输入 token；它是每层 transformer block 的 AdaLN/门控调制条件。
+        <code>joint_delta</code> 选择改这里，是因为可以在不改变 token 序列和 MoT attention 结构的前提下，
+        让 action 分支感知 MeanFlow 区间。
+      </p>
+
+      <h3>ActionDiT 与 VideoDiT 中的具体位置</h3>
+      <p>
+        时间调制不在 VAE、action encoder、text embedding 或 MoT attention mask 里。它是在每个 DiT expert 的
+        <code>pre_dit()</code> 阶段先算好，然后随 token 一起传入每一层 transformer block。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>分支</th>
+            <th>生成位置</th>
+            <th>形状</th>
+            <th>使用位置</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>ActionDiT</td>
+            <td><code>ActionDiT.pre_dit()</code></td>
+            <td><code>[B,6,H]</code></td>
+            <td>每层 action transformer block 的 attention/MLP shift、scale、gate；action 输出 head 当前不再使用时间调制。</td>
+          </tr>
+          <tr>
+            <td>VideoDiT</td>
+            <td><code>WanVideoDiT.pre_dit()</code></td>
+            <td><code>[B,S,6,H]</code>，其中 <code>S=T_lat*H_lat*W_lat</code> 是 video patch token 数</td>
+            <td>每层 video transformer block 的 token-wise shift、scale、gate；video 输出 head 还会再用 <code>t</code> 做一次 shift/scale。</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        ActionDiT 是 action 序列级调制：一个样本内所有 action token 共享同一个 \(m_a(t)\)。
+        它的时间调制生成后直接进入 action blocks：
+      </p>
+      <div class="formula">
+        \[
+        a_{\text{tok}}=\operatorname{Linear}_{a}(a_t),\qquad
+        m_a(t)=P^a_{\text{time}}(E^a_{\text{time}}(\phi(t)))\in\mathbb{R}^{6\times H}
+        \]
+        \[
+        x^{\ell+1}_{a}
+        =
+        \operatorname{ActionBlock}_{\ell}\left(x^\ell_a,\ c,\ m_a(t)\right)
+        \]
+      </div>
+      <pre><code># src/fastwam/models/wan22/action_dit.py
+pre_state = self.pre_dit(action_tokens=action_tokens, timestep=timestep, ...)
+x = pre_state["tokens"]
+t_mod = pre_state["t_mod"]
+
+for block in self.blocks:
+    x = block(x, context, t_mod, freqs, context_mask=context_mask)
+
+return self.head(x)</code></pre>
+      <p>
+        VideoDiT 在当前 FastWAM 配置中使用 token-wise 时间调制。因为 first-frame latent 是条件帧，
+        <code>token_timesteps[:, 0, :]</code> 被置为 0；其余 video latent token 使用当前 noisy timestep。
+        这样第一帧 token 和待生成帧 token 在同一个 video expert 中使用不同时间条件：
+      </p>
+      <div class="formula">
+        \[
+        m_z(t_i)=P^z_{\text{time}}(E^z_{\text{time}}(\phi(t_i)))\in\mathbb{R}^{6\times H}
+        \]
+        \[
+        M_z=[m_z(t_1),\ldots,m_z(t_S)]\in\mathbb{R}^{S\times6\times H}
+        \]
+      </div>
+      <pre><code># src/fastwam/models/wan22/wan_video_dit.py
+token_timesteps = torch.ones((batch_size, x.shape[2], tokens_per_frame)) * timestep.view(batch_size, 1, 1)
+token_timesteps[:, 0, :] = 0
+token_timesteps = token_timesteps.reshape(batch_size, -1)
+
+token_t_emb = sinusoidal_embedding_1d(self.freq_dim, token_timesteps.reshape(-1))
+t = self.time_embedding(token_t_emb).reshape(batch_size, -1, self.hidden_dim)
+t_mod = self.time_projection(t).unflatten(2, (6, self.hidden_dim))</code></pre>
+      <p>
+        VideoDiT block 使用 <code>t_mod</code> 的方式和 action block 一样，只是多了 token 维度；
+        <code>chunk_dim=2</code> 表示在 <code>[B,S,6,H]</code> 的第 6 组调制维上切分：
+      </p>
+      <pre><code># src/fastwam/models/wan22/wan_video_dit.py
+for block in self.blocks:
+    x_tokens = block(
+        x_tokens,
+        context_emb,
+        t_mod,
+        freqs,
+        context_mask=context_attn_mask,
+        self_attn_mask=self_attn_mask,
+    )
+
+# video head also uses pre_state["t"]
+x = self.head(x_tokens, pre_state["t"])</code></pre>
+      <p>
+        在 FastWAM 的 MoT 路径中，video 和 action 的 <code>t_mod</code> 分别通过
+        <code>t_mod_all["video"]</code> 与 <code>t_mod_all["action"]</code> 传给 MoT。MoT 每层先用各自 expert 的
+        <code>t_mod</code> 构造 Q/K/V 输入和 residual gate，再把 video/action 的 Q/K/V 拼起来做 mixed attention。
+        因此时间调制发生在 mixed attention 之前，并且每个 expert 保留自己的时间条件。
+      </p>
+      <pre><code># src/fastwam/models/wan22/mot.py
+tokens_out = self.mot(
+    embeds_all={"video": video_pre["tokens"], "action": action_pre["tokens"]},
+    t_mod_all={"video": video_pre["t_mod"], "action": action_pre["t_mod"]},
+    ...
+)
+
+# inside each MoT layer
+q, k, v, residual_x, gate_msa, shift_mlp, scale_mlp, gate_mlp, _ = \
+    self._build_expert_attention_io(..., t_mod=t_mod)</code></pre>
+
+      <h3>DiTBlock 里的 LayerNorm 与时间调制</h3>
+      <p>
+        每层 DiTBlock 里有三处 LayerNorm：<code>norm1</code>、<code>norm2</code> 和 <code>norm3</code>。
+        其中 <code>norm1</code>/<code>norm2</code> 关闭了 LayerNorm 自己的 affine 参数，
+        因为它们后面会接时间调制生成的 shift/scale；<code>norm3</code> 保留 affine 参数，
+        因为 cross-attention 分支没有额外的 timestep shift/scale。
+      </p>
+      <pre><code># src/fastwam/models/wan22/wan_video_dit.py
+self.norm1 = nn.LayerNorm(hidden_dim, eps=eps, elementwise_affine=False)
+self.norm2 = nn.LayerNorm(hidden_dim, eps=eps, elementwise_affine=False)
+self.norm3 = nn.LayerNorm(hidden_dim, eps=eps)</code></pre>
+      <p>
+        <code>LN(no affine)</code> 只做标准化，没有可学习的 \(\gamma,\beta\)：
+      </p>
+      <div class="formula">
+        \[
+        \operatorname{LN}_{\text{no-affine}}(x)
+        =
+        \frac{x-\mu}{\sqrt{\sigma^2+\epsilon}}
+        \]
+      </div>
+      <p>
+        然后由时间调制提供 scale 和 shift：
+      </p>
+      <div class="formula">
+        \[
+        \operatorname{modulate}(\operatorname{LN}(x),s,c)
+        =
+        \operatorname{LN}(x)\cdot(1+c)+s
+        \]
+      </div>
+      <pre><code># self-attention input
+input_x = modulate(self.norm1(x), shift_msa, scale_msa)
+
+# MLP input
+input_x = modulate(self.norm2(x), shift_mlp, scale_mlp)</code></pre>
+      <p>
+        <code>LN(affine)</code> 则保留可学习的 \(\gamma,\beta\)：
+      </p>
+      <div class="formula">
+        \[
+        \operatorname{LN}_{\text{affine}}(x)
+        =
+        \gamma\frac{x-\mu}{\sqrt{\sigma^2+\epsilon}}+\beta
+        \]
+      </div>
+      <pre><code># cross-attention input
+x = x + self.cross_attn(self.norm3(x), context, ctx_mask=context_mask)</code></pre>
+      <p>
+        因此，timestep 生成的 <code>t_mod</code> 主要控制 self-attention 和 MLP 两条主干分支：
+        <code>shift_msa/scale_msa/gate_msa</code> 控制 self-attention，
+        <code>shift_mlp/scale_mlp/gate_mlp</code> 控制 MLP；cross-attention 分支是普通
+        affine LayerNorm 加 residual。
+      </p>
+
+      <h3>早期 additive_start 条件器</h3>
+      <p>
+        早期 <code>additive_start</code> 只把起点 \(r\) 编码成 residual，叠加到原始 \(m(t)\) 上：
+      </p>
+      <div class="formula">
+        \[
+        \tilde m(t,r) = m(t) + \Delta m_r,\qquad
+        \Delta m_r = g_r(\phi(r))
+        \]
+      </div>
+      <pre><code># src/fastwam/models/wan22/fastwam_one_step_meanflow.py
+start_emb = sinusoidal_embedding_1d(self.action_expert.freq_dim, start_position)
+start_hidden = self.action_expert.meanflow_start_embedding(start_emb)
+start_mod = self.action_expert.meanflow_start_projection(start_hidden).unflatten(
+    1, (6, self.action_expert.hidden_dim)
+)
+action_pre["t_mod"] = action_pre["t_mod"] + start_mod</code></pre>
+      <p>
+        这个版本的问题是新增 residual 只依赖 \(r\)，没有显式看到当前时间 \(t\) 和区间长度 \(t-r\)。
+      </p>
+
+      <h3>当前 joint_delta 条件器网络</h3>
+      <p>
+        当前 <code>joint_delta</code> 把当前时间、起点时间和区间长度联合编码。它仍然输出一个 residual，
+        但 residual 来自 \(f(t,r,t-r)\)，而不是只来自 \(f(r)\)：
+      </p>
+      <div class="formula">
+        \[
+        e_{\text{jd}}(t,r)
+        =
+        \left[\phi(t),\ \phi(r),\ \phi(t-r)\right]
+        \]
+        \[
+        \Delta m_{\text{jd}}
+        =
+        P_{\text{jd}}\left(E_{\text{jd}}(e_{\text{jd}})\right)
+        \in \mathbb{R}^{6\times H}
+        \]
+        \[
+        \tilde m_{\text{jd}}(t,r)
+        =
+        m(t) + \Delta m_{\text{jd}}(t,r)
+        \]
+      </div>
+      <p>
+        对应网络结构是两段 MLP。第一段把拼接后的区间 embedding 从 \(3F\) 映射到 \(H\)，
+        第二段把 hidden 表示投影成 \(6H\) 个调制 residual：
+      </p>
+      <pre><code># src/fastwam/models/wan22/fastwam_one_step_meanflow.py
+self.action_expert.meanflow_joint_time_embedding = nn.Sequential(
+    nn.Linear(freq_dim * 3, hidden_dim),
+    nn.SiLU(),
+    nn.Linear(hidden_dim, hidden_dim),
+)
+self.action_expert.meanflow_joint_time_projection = nn.Sequential(
+    nn.SiLU(),
+    nn.Linear(hidden_dim, hidden_dim * 6),
+)</code></pre>
+      <pre><code># src/fastwam/models/wan22/fastwam_one_step_meanflow.py
+action_emb = sinusoidal_embedding_1d(self.action_expert.freq_dim, action_position)
+start_emb = sinusoidal_embedding_1d(self.action_expert.freq_dim, start_position)
+interval_emb = sinusoidal_embedding_1d(self.action_expert.freq_dim, interval_position)
+joint_emb = torch.cat([action_emb, start_emb, interval_emb], dim=1)
+
+joint_hidden = self.action_expert.meanflow_joint_time_embedding(joint_emb)
+joint_mod = self.action_expert.meanflow_joint_time_projection(joint_hidden).unflatten(
+    1, (6, self.action_expert.hidden_dim)
+)
+action_pre["t_mod"] = action_pre["t_mod"] + joint_mod</code></pre>
+      <p>
+        这里 \(\phi(\cdot)\) 是 sinusoidal timestep embedding。当前 action expert 中
+        <code>freq_dim=256</code>，因此拼接后的 <code>joint_emb</code> 维度是 \(256\times3=768\)；
+        <code>hidden_dim=1024</code>，输出 residual 形状是 \([B,6,1024]\)。
+        最后一层零初始化，所以训练起点严格接近 release policy：
+      </p>
+      <div class="formula">
+        \[
+        \Delta m_{\text{jd}}(t,r)=0
+        \quad\Rightarrow\quad
+        \tilde m_{\text{jd}}(t,r)=m(t)
+        \]
+      </div>
+      <div class="note">
+        <strong>术语澄清：</strong>
+        <code>joint_delta</code> 的 "joint" 指联合编码 \(t,r,t-r\) 这个 MeanFlow 区间，
+        不是指训练时让 action token 访问完整未来 video token。当前候选仍是 release-style first-frame action policy。
+      </div>
+    </section>
+
+    <section id="implementation">
+      <h2>实现方式</h2>
+      <div class="grid">
+        <div>
+          <h3>核心代码</h3>
+          <ul>
+            <li><a href="../src/fastwam/models/wan22/fastwam_one_step_meanflow.py"><code>src/fastwam/models/wan22/fastwam_one_step_meanflow.py</code></a></li>
+            <li><a href="../configs/model/fastwam_one_step_meanflow.yaml"><code>configs/model/fastwam_one_step_meanflow.yaml</code></a></li>
+            <li><a href="../configs/task/libero_one_step_meanflow_joint_conditioner_2cam224_1e-4.yaml"><code>configs/task/libero_one_step_meanflow_joint_conditioner_2cam224_1e-4.yaml</code></a></li>
+          </ul>
+        </div>
+        <div>
+          <h3>关键函数</h3>
+          <ul>
+            <li><code>_install_meanflow_start_conditioner()</code>：安装 additive 或 joint delta 条件器。</li>
+            <li><code>_apply_meanflow_start_conditioning()</code>：把 \(t,r,t-r\) 的 residual 加到 action <code>t_mod</code>。</li>
+            <li><code>_training_loss_finite_difference()</code>：实现 finite-difference MeanFlow target。</li>
+            <li><code>_predict_action_noise_with_cache()</code>：推理时使用 release-style video KV cache。</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>训练可学习范围</h3>
+      <p>
+        当前候选配置使用 <code>trainable_scope=conditioner</code>。
+        这意味着 video expert、action expert 主体和 proprio encoder 都冻结，只训练
+        <code>meanflow_joint_time_embedding</code> 与 <code>meanflow_joint_time_projection</code>。
+      </p>
+      <pre><code>model:
+  one_step_meanflow:
+    objective: finite_difference
+    random_timesteps: true
+    equal_time_prob: 0.0
+    trainable_scope: conditioner
+    train_proprio_encoder: false
+    conditioner_mode: joint_delta
+    freeze_video_expert: true
+    start_timestep: 0.0
+    end_timestep: null
+    derivative_epsilon: 0.05
+resume: ./checkpoints/fastwam_release/libero_uncond_2cam224.pt
+max_steps: 2000
+save_every: 500</code></pre>
+
+      <h3>推理路径</h3>
+      <p>
+        评测时仍走 release action policy 风格：输入当前图像，编码 first-frame latent，prefill video KV cache，
+        然后对 action noise 做动作 denoise。对于当前 one-step readout：
+      </p>
+      <div class="formula">
+        \[
+        r=0,\quad t=1,\quad
+        a_0 = a_1 - u_\theta(a_1,0,1)
+        \]
+      </div>
+      <p>
+        因此 <code>NUM_INFERENCE_STEPS=1</code> 时它是干净的一步生成。若设置多步推理，
+        当前实现每一步仍固定 \(r=0\)，不能解释为严格的局部区间 solver。
+      </p>
+    </section>
+
+    <section id="data">
+      <h2>训练数据集与微调数据集使用</h2>
+      <h3>数据准备流程</h3>
+      <p>
+        当前仓库不从原始 simulator replay 现场重新构造数据，而是使用已经整理成 LeRobot 格式的预处理数据。
+        准备流程分为下载解压、文本 embedding 预计算、normalization stats 对齐、训练或微调四步。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>步骤</th>
+            <th>LIBERO</th>
+            <th>RoboTwin</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1. 下载与解压</td>
+            <td>
+              Hugging Face dataset：<code>yuanty/LIBERO-fastwam</code>。<br>
+              解压到 <code>data/libero_mujoco3.3.2/</code>。
+            </td>
+            <td>
+              Hugging Face dataset：<code>yuanty/robotwin2.0-fastwam</code>。<br>
+              分卷拼接后解压到 <code>data/robotwin2.0/</code>。
+            </td>
+            <td>解压后的目录必须和 <code>configs/data/*.yaml</code> 里的 <code>dataset_dirs</code> 对齐。</td>
+          </tr>
+          <tr>
+            <td>2. 文本 embedding</td>
+            <td><code>python scripts/precompute_text_embeds.py task=libero_uncond_2cam224_1e-4</code></td>
+            <td><code>python scripts/precompute_text_embeds.py task=robotwin_uncond_3cam_384_1e-4</code></td>
+            <td>训练配置默认 <code>load_text_encoder=false</code>，因此训练样本需要直接提供 <code>context/context_mask</code>。</td>
+          </tr>
+          <tr>
+            <td>3. 统计量</td>
+            <td><code>checkpoints/fastwam_release/libero_uncond_2cam224_dataset_stats.json</code></td>
+            <td><code>data/robotwin2.0/dataset_stats.json</code></td>
+            <td>release 复现和 <code>joint_delta</code> 微调必须使用同一份 stats，避免 action/state 坐标系漂移。</td>
+          </tr>
+          <tr>
+            <td>4. 训练或微调</td>
+            <td><code>bash scripts/train_zero1.sh 8 task=libero_uncond_2cam224_1e-4</code></td>
+            <td><code>bash scripts/train_zero1.sh 8 task=robotwin_uncond_3cam_384_1e-4</code></td>
+            <td>新数据从头训练时可先把 <code>pretrained_norm_stats=null</code>，首个 run 会产出新的 <code>dataset_stats.json</code>。</td>
+          </tr>
+        </tbody>
+      </table>
+      <pre><code># LIBERO 解压结构
+data/libero_mujoco3.3.2/
+├── libero_10_no_noops_lerobot/
+├── libero_goal_no_noops_lerobot/
+├── libero_object_no_noops_lerobot/
+└── libero_spatial_no_noops_lerobot/
+
+# RoboTwin 解压结构
+data/robotwin2.0/
+└── robotwin2.0/
+    ├── data/
+    ├── meta/
+    └── videos/</code></pre>
+
+      <h3>样本构造与归一化</h3>
+      <p>
+        <code>RobotVideoDataset</code> 读取 LeRobot 数据后，<code>FastWAMProcessor</code> 负责把图像、动作、
+        state/proprio 和任务文本整理成训练样本。一个 batch 进入模型前的主要字段是：
+        <code>video</code>、<code>action</code>、<code>proprio</code>、<code>context</code>、<code>context_mask</code>，
+        以及 padding mask。
+      </p>
+      <div class="formula">
+        \[
+        \text{video}\in\mathbb{R}^{B\times 3\times T\times H\times W},\quad
+        \text{action}\in\mathbb{R}^{B\times 32\times d_a},\quad
+        \text{proprio}\in\mathbb{R}^{B\times 33\times d_p}
+        \]
+      </div>
+      <p>
+        action/state 的归一化由 <code>LinearNormalizer</code> 完成。LIBERO 当前使用
+        <code>min/max</code>，RoboTwin 当前使用 <code>z-score</code>：
+      </p>
+      <div class="formula">
+        \[
+        \text{min/max:}\quad
+        \tilde{x}
+        =
+        2\frac{x-x_{\min}}{x_{\max}-x_{\min}}-1
+        \]
+        \[
+        \text{z-score:}\quad
+        \tilde{x}
+        =
+        \frac{x-\mu}{\sigma+10^{-8}}
+        \]
+      </div>
+      <p>
+        归一化后的值会被 clamp 到 \([-5,5]\)。多字段 action/state 通过
+        <code>ConcatLeftAlign</code> 左对齐拼接；LIBERO 的 <code>delta_action_dim_mask</code>
+        指定 eef pose 6 维是 delta action，gripper 维不是 delta action。
+      </p>
+
+      <h3>Release/基础训练数据</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>数据集</th>
+            <th>路径与组成</th>
+            <th>观测与动作设置</th>
+            <th>当前用途</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>LIBERO</td>
+            <td>
+              <code>./data/libero_mujoco3.3.2/libero_spatial_no_noops_lerobot</code><br>
+              <code>./data/libero_mujoco3.3.2/libero_object_no_noops_lerobot</code><br>
+              <code>./data/libero_mujoco3.3.2/libero_goal_no_noops_lerobot</code><br>
+              <code>./data/libero_mujoco3.3.2/libero_10_no_noops_lerobot</code>
+            </td>
+            <td>
+              2 cameras 横向拼接，最终视频尺寸 <code>[224,448]</code>；
+              <code>num_frames=33</code>；
+              <code>action_video_freq_ratio=4</code>；
+              action dim 7，proprio dim 8；
+              eef pose 6 维是 delta，gripper 不是 delta。
+            </td>
+            <td>
+              release LIBERO 训练/评测基线；当前 <code>joint_delta</code> 微调也使用同一套数据和同一个
+              release dataset stats。
+            </td>
+          </tr>
+          <tr>
+            <td>RoboTwin</td>
+            <td><code>./data/robotwin2.0/robotwin2.0</code></td>
+            <td>
+              3 cameras：<code>cam_high</code>、<code>cam_left_wrist</code>、<code>cam_right_wrist</code>；
+              最终视频尺寸 <code>[384,320]</code>；
+              action dim 14，proprio dim 14；
+              <code>num_frames=33</code>，<code>action_video_freq_ratio=4</code>。
+            </td>
+            <td>
+              release RoboTwin 权重与 quick baseline 使用；当前 <code>joint_delta</code> 结果尚未在 RoboTwin 上做正式复现。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Joint Delta 微调数据</h3>
+      <p>
+        <code>joint_delta</code> 微调不引入新标注，也不换数据域。它复用 LIBERO release 的 LeRobot 数据、
+        文本 embedding cache 和 normalization stats：
+      </p>
+      <ul>
+        <li>数据配置：<code>configs/data/libero_2cam.yaml</code>。</li>
+        <li>任务配置：<code>configs/task/libero_one_step_meanflow_joint_conditioner_2cam224_1e-4.yaml</code>。</li>
+        <li>norm stats：<code>checkpoints/fastwam_release/libero_uncond_2cam224_dataset_stats.json</code>。</li>
+        <li>text embedding cache：<code>./data/text_embeds_cache/libero</code>，<code>context_len=128</code>。</li>
+        <li>微调起点：<code>checkpoints/fastwam_release/libero_uncond_2cam224.pt</code>。</li>
+      </ul>
+      <p>
+        每个训练样本从动作 chunk 中随机采样一个 MeanFlow 区间 \(0\le r<t\le1\)，再构造 noisy action
+        和 finite-difference target。由于只训练条件器，微调更像 release policy 的 interval-adapter，
+        而不是一次完整 policy-body finetune。
+      </p>
+    </section>
+
+    <section id="experiments">
+      <h2>当前实验总结</h2>
+      <h3>从失败版本到当前候选</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>阶段</th>
+            <th>设置</th>
+            <th>结果</th>
+            <th>结论</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>早期 action-only MeanFlow</td>
+            <td>训练 full action expert 和 proprio encoder，finite-difference MeanFlow。</td>
+            <td>LIBERO full 2k pilot overall 6.70%；gap probe 约 1/7。</td>
+            <td><span class="tag bad">失败</span> 大幅 collapse，说明不能直接放开 action body 短训。</td>
+          </tr>
+          <tr>
+            <td>joint finite-difference MeanFlow</td>
+            <td>video/action 都改成 finite-difference MeanFlow。</td>
+            <td>gap probe 0/7。</td>
+            <td><span class="tag bad">失败</span> 改动过大，破坏 release video/action 结构。</td>
+          </tr>
+          <tr>
+            <td>C-joint finite-difference 诊断</td>
+            <td>保留 video flow anchor，action 分支使用 MeanFlow。</td>
+            <td>step 500/1000/1500/2000 gap probe 均 0/7。</td>
+            <td><span class="tag bad">失败</span> 没有优于 release-style action path。</td>
+          </tr>
+          <tr>
+            <td>additive_start conditioner</td>
+            <td>只训练 \(f(r)\) 残差条件器。</td>
+            <td>单 trial gap probe step 1000/1500/2000 为 5/7。</td>
+            <td><span class="tag warn">不稳</span> 只看 \(r\) 的条件过弱。</td>
+          </tr>
+          <tr>
+            <td>joint_delta conditioner</td>
+            <td>只训练 \(f(t,r,t-r)\) 区间条件器。</td>
+            <td>单 trial gap probe step 1000/1500/2000 为 7/7；5-trial gap probe step 2000 为 33/35。</td>
+            <td><span class="tag good">当前候选</span> 保留 release policy，同时显式编码区间。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>5/22 长程诊断</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>评测集</th>
+            <th>checkpoint</th>
+            <th class="num">任务/trials</th>
+            <th class="num">成功率</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>libero_long_official</code></td>
+            <td><code>step_001500</code></td>
+            <td class="num">10 tasks, 50 trials</td>
+            <td class="num">94.00</td>
+            <td>官方 LIBERO-10，trial 0-4。</td>
+          </tr>
+          <tr>
+            <td><code>libero_long_official</code></td>
+            <td><code>step_002000</code></td>
+            <td class="num">10 tasks, 50 trials</td>
+            <td class="num">96.00</td>
+            <td>优于 step 1500，进入 full-suite readout。</td>
+          </tr>
+          <tr>
+            <td><code>libero_long_horizon_v1</code></td>
+            <td><code>step_002000</code></td>
+            <td class="num">13 tasks, 65 trials</td>
+            <td class="num">95.38</td>
+            <td>包含更难的 long-horizon 诊断任务。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>5/25 Full LIBERO 4-suite Readout</h3>
+      <p>
+        最新正式 readout 使用 <code>step_002000.pt</code>，每个 suite 10 tasks，每个 task 50 trials，
+        共 2000 trials，<code>NUM_INFERENCE_STEPS=1</code>。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th class="num">Spatial</th>
+            <th class="num">Object</th>
+            <th class="num">Goal</th>
+            <th class="num">LIBERO-10</th>
+            <th class="num">Overall</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>release_1</code></td>
+            <td class="num">96.60</td>
+            <td class="num">99.20</td>
+            <td class="num">95.20</td>
+            <td class="num">92.20</td>
+            <td class="num">95.80</td>
+          </tr>
+          <tr>
+            <td><code>joint_delta_1 step2000</code></td>
+            <td class="num">97.00</td>
+            <td class="num">99.60</td>
+            <td class="num">93.40</td>
+            <td class="num">93.60</td>
+            <td class="num">95.90</td>
+          </tr>
+          <tr>
+            <td><code>release_10</code></td>
+            <td class="num">97.80</td>
+            <td class="num">99.40</td>
+            <td class="num">95.40</td>
+            <td class="num">94.60</td>
+            <td class="num">96.80</td>
+          </tr>
+        </tbody>
+      </table>
+      <table>
+        <thead>
+          <tr>
+            <th>对比</th>
+            <th class="num">Spatial</th>
+            <th class="num">Object</th>
+            <th class="num">Goal</th>
+            <th class="num">LIBERO-10</th>
+            <th class="num">Overall</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>joint_delta_1 - release_1</code></td>
+            <td class="num">+0.40</td>
+            <td class="num">+0.40</td>
+            <td class="num">-1.80</td>
+            <td class="num">+1.40</td>
+            <td class="num">+0.10</td>
+          </tr>
+          <tr>
+            <td><code>joint_delta_1 - release_10</code></td>
+            <td class="num">-0.80</td>
+            <td class="num">+0.20</td>
+            <td class="num">-2.00</td>
+            <td class="num">-1.00</td>
+            <td class="num">-0.90</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <strong>实验结论：</strong>
+        当前 <code>joint_delta</code> 已经基本打平 <code>release_1</code>，并在长程 <code>libero_10</code>
+        上有明确提升；但它还没有达到 <code>release_10</code> 的整体水平，主要短板在 <code>libero_goal</code>。
+      </div>
+
+      <h3>Latency 观察</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th class="num">steps</th>
+            <th class="num">End-to-end mean</th>
+            <th class="num">Denoise loop mean</th>
+            <th>环境</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>release_1</code></td>
+            <td class="num">1</td>
+            <td class="num">73.13 ms</td>
+            <td class="num">30.44 ms</td>
+            <td>H100/H200 class GPU readout file: <code>release_1_vs_10_may25_gpu0.json</code></td>
+          </tr>
+          <tr>
+            <td><code>joint_delta_1</code></td>
+            <td class="num">1</td>
+            <td class="num">70.82 ms</td>
+            <td class="num">29.55 ms</td>
+            <td>同一输入形状，<code>mf_jointcond_step2000_1step_may25_gpu0.json</code></td>
+          </tr>
+          <tr>
+            <td><code>release_10</code></td>
+            <td class="num">10</td>
+            <td class="num">336.65 ms</td>
+            <td class="num">292.67 ms</td>
+            <td>多 9 次 action denoise，闭环环境开销之外的模型开销明显更高。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="takeaways">
+      <h2>后续建议</h2>
+      <ul>
+        <li>把 <code>joint_delta step_002000</code> 作为当前 MeanFlow 候选 checkpoint，不再优先推进 full action expert 微调。</li>
+        <li>正式报告时同时列 <code>release_1</code>、<code>joint_delta_1</code>、<code>release_10</code>，避免只和 10-step 上界比或只和 1-step baseline 比。</li>
+        <li>下一步应重点诊断 <code>libero_goal</code> 下降，尤其是低成功率 task，例如 goal_5 和 goal_9。</li>
+        <li>RoboTwin 上还没有对应的 <code>joint_delta</code> 正式微调与评测，不能把 LIBERO 结论直接外推。</li>
+      </ul>
+      <h3>参考路径</h3>
+      <ul>
+        <li><code>docs/worklog/2026-05-22-libero-meanflow-conditioner-ablation-worklog.md</code></li>
+        <li><code>docs/worklog/2026-05-12-libero-release-step-curve-worklog.md</code></li>
+        <li><code>evaluate_results/libero/mf_jointcond_step2000_full4suite_50trials_20260525/summary.csv</code></li>
+        <li><code>evaluate_results/libero/release_baseline_20260512_steps1/summary.csv</code></li>
+        <li><code>evaluate_results/libero/release_baseline_20260512_steps10_v2/summary.csv</code></li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

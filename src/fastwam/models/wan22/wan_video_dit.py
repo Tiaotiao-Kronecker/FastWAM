@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+from contextlib import contextmanager
 from typing import Any, Dict, Tuple, Optional
 from einops import rearrange
 from .helpers.gradient import gradient_checkpoint_forward
@@ -10,13 +11,55 @@ from fastwam.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+
+_FORCE_MANUAL_ATTENTION = False
+
+
+@contextmanager
+def force_manual_attention(enabled: bool = True):
+    global _FORCE_MANUAL_ATTENTION
+    previous = _FORCE_MANUAL_ATTENTION
+    _FORCE_MANUAL_ATTENTION = bool(enabled)
+    try:
+        yield
+    finally:
+        _FORCE_MANUAL_ATTENTION = previous
+
+
+def is_manual_attention_forced() -> bool:
+    return _FORCE_MANUAL_ATTENTION
+
+
+def _manual_scaled_dot_product_attention(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    ctx_mask: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
+    scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(q.shape[-1])
+    if ctx_mask is not None:
+        mask = ctx_mask.to(device=scores.device)
+        if mask.dtype == torch.bool:
+            if mask.ndim == 2:
+                mask = mask.unsqueeze(0).unsqueeze(0)
+            elif mask.ndim == 3:
+                mask = mask.unsqueeze(1)
+            scores = scores.masked_fill(~mask, torch.finfo(scores.dtype).min)
+        else:
+            scores = scores + mask.to(dtype=scores.dtype)
+    attn = torch.softmax(scores.float(), dim=-1).to(dtype=q.dtype)
+    return torch.matmul(attn, v)
+
     
 def flash_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, num_heads: int, ctx_mask: Optional[torch.Tensor] = None, compatibility_mode=True):
     if compatibility_mode:
         q = rearrange(q, "b s (n d) -> b n s d", n=num_heads)
         k = rearrange(k, "b s (n d) -> b n s d", n=num_heads)
         v = rearrange(v, "b s (n d) -> b n s d", n=num_heads)
-        x = F.scaled_dot_product_attention(q, k, v, attn_mask=ctx_mask)
+        if _FORCE_MANUAL_ATTENTION:
+            x = _manual_scaled_dot_product_attention(q, k, v, ctx_mask=ctx_mask)
+        else:
+            x = F.scaled_dot_product_attention(q, k, v, attn_mask=ctx_mask)
         x = rearrange(x, "b n s d -> b s (n d)", n=num_heads)
         return x
     else:
@@ -523,6 +566,23 @@ class WanVideoDiT(torch.nn.Module):
             context_mask=context_mask,
             action=action,
         )
+        x = x.to(
+            device=self.patch_embedding.weight.device,
+            dtype=self.patch_embedding.weight.dtype,
+        )
+        timestep = timestep.to(
+            device=self.time_embedding[0].weight.device,
+            dtype=self.time_embedding[0].weight.dtype,
+        )
+        context = context.to(
+            device=self.text_embedding[0].weight.device,
+            dtype=self.text_embedding[0].weight.dtype,
+        )
+        if self.action_conditioned and action is not None:
+            action = action.to(
+                device=self.action_embedding.weight.device,
+                dtype=self.action_embedding.weight.dtype,
+            )
 
         batch_size = x.shape[0]
         patch_h = int(self.patch_size[1])

@@ -145,6 +145,25 @@ def _read_unique_prompts(dataset_dirs: list[str]) -> list[str]:
     return prompts
 
 
+def _read_prompt_file(prompt_file: str) -> list[str]:
+    path = Path(prompt_file).expanduser()
+    if not path.exists():
+        raise FileNotFoundError(f"Missing prompt_file: {path}")
+
+    prompts: list[str] = []
+    seen = set()
+    with path.open("r", encoding="utf-8") as f:
+        for line_idx, line in enumerate(f, start=1):
+            prompt = line.strip()
+            if not prompt:
+                continue
+            if prompt not in seen:
+                seen.add(prompt)
+                prompts.append(prompt)
+    logger.info("Loaded %d unique prompts from %s.", len(prompts), path)
+    return prompts
+
+
 def _get_override_prompt(override_instruction: Any) -> str | None:
     if override_instruction is None:
         return None
@@ -192,16 +211,20 @@ def main(cfg: DictConfig):
         raise ValueError("No `text_embedding_cache_dir` found under `cfg.data`.")
 
     context_len = _resolve_context_len(context_lens)
-    override_prompt = _get_override_prompt(cfg.get("override_instruction"))
-    if override_prompt is not None:
-        prompts = [override_prompt]
-        logger.info("Using override_instruction; skipping dataset scan and encoding exactly 1 prompt.")
+    prompt_file = cfg.get("prompt_file")
+    if prompt_file is not None and str(prompt_file).strip():
+        prompts = _read_prompt_file(str(prompt_file))
     else:
-        if not dataset_dirs:
-            raise ValueError("No `dataset_dirs` found under `cfg.data`.")
-        prompts = _read_unique_prompts(dataset_dirs)
+        override_prompt = _get_override_prompt(cfg.get("override_instruction"))
+        if override_prompt is not None:
+            prompts = [override_prompt]
+            logger.info("Using override_instruction; skipping dataset scan and encoding exactly 1 prompt.")
+        else:
+            if not dataset_dirs:
+                raise ValueError("No `dataset_dirs` found under `cfg.data`.")
+            prompts = _read_unique_prompts(dataset_dirs)
     if not prompts:
-        logger.warning("No prompts found from tasks.jsonl; nothing to do.")
+        logger.warning("No prompts found; nothing to do.")
         return
 
     if torch.cuda.is_available():

@@ -143,6 +143,12 @@ def _build_groups() -> dict[str, GroupConfig]:
             "./runs/robotwin_one_step_shortcut_10step/checkpoints/weights/step_000010.pt",
         )
     )
+    meanflow_ckpt = _resolve_path(
+        os.environ.get(
+            "MEANFLOW_CKPT",
+            "./runs/robotwin_one_step_meanflow_10step/checkpoints/weights/step_000010.pt",
+        )
+    )
     groups = {
         "release_1": GroupConfig("release_1", release_ckpt, stats, 1),
         "release_4": GroupConfig("release_4", release_ckpt, stats, 4),
@@ -154,6 +160,13 @@ def _build_groups() -> dict[str, GroupConfig]:
             stats,
             1,
             os.environ.get("SHORTCUT_TASK", "robotwin_one_step_shortcut_3cam_384_1e-4"),
+        ),
+        "meanflow_1": GroupConfig(
+            "meanflow_1",
+            meanflow_ckpt,
+            stats,
+            1,
+            os.environ.get("MEANFLOW_TASK", "robotwin_one_step_meanflow_3cam_384_1e-4"),
         ),
     }
     return groups
@@ -200,6 +213,7 @@ def main() -> None:
     num_gpus = int(os.environ.get("NUM_GPUS", "8"))
     max_tasks_per_gpu = int(os.environ.get("MAX_TASKS_PER_GPU", "1"))
     task_config_name = os.environ.get("TASK", "robotwin_uncond_3cam_384_1e-4")
+    timing_enabled = os.environ.get("TIMING_ENABLED")
     if episodes <= 0:
         raise ValueError("EPISODES must be > 0")
     if num_gpus <= 0:
@@ -239,7 +253,7 @@ def main() -> None:
 
     def build_cmd(job: EvalJob, gpu_id: int) -> list[str]:
         task_config = job.group.task_config or task_config_name
-        return [
+        cmd = [
             sys.executable,
             str(SINGLE_ENTRY),
             f"task={task_config}",
@@ -252,6 +266,9 @@ def main() -> None:
             f"EVALUATION.dataset_stats_path={str(job.group.stats)}",
             f"EVALUATION.output_dir={str(output_root / job.run_ts)}",
         ]
+        if timing_enabled is not None and str(timing_enabled).strip() != "":
+            cmd.append(f"EVALUATION.timing_enabled={str(timing_enabled).strip()}")
+        return cmd
 
     def launch(job: EvalJob, gpu_id: int) -> RunningJob:
         cmd = build_cmd(job, gpu_id)

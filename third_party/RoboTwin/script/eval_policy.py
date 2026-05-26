@@ -399,6 +399,20 @@ def eval_policy(task_name,
         if TASK_ENV.render_freq:
             TASK_ENV.viewer.close()
 
+        if hasattr(model, "get_timing_rollout"):
+            timing = model.get_timing_rollout()
+            infer_s = float(timing.get("infer_s", 0.0))
+            sim_s = float(timing.get("sim_s", 0.0))
+            infer_count = float(timing.get("infer_count", 0.0))
+            infer_avg_s = float(timing.get("infer_avg_s", 0.0))
+            if infer_s > 0.0 or sim_s > 0.0 or infer_count > 0.0:
+                print(
+                    "[fastwam_timing] "
+                    f"task={task_name} episode={TASK_ENV.test_num} success={succ} "
+                    f"action_steps={TASK_ENV.take_action_cnt} infer_count={infer_count:.0f} "
+                    f"infer_s={infer_s:.6f} infer_avg_s={infer_avg_s:.6f} sim_s={sim_s:.6f}"
+                )
+
         TASK_ENV.test_num += 1
 
         print(

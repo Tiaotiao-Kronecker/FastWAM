@@ -1,0 +1,38 @@
+# @package _global_
+
+defaults:
+  - override /data: libero_2cam
+  - override /model: fastwam_one_step_shortcut_official
+  - _self_
+
+# dataloading
+batch_size: 1
+num_workers: 0
+
+model:
+  mot_checkpoint_mixed_attn: true
+  one_step_shortcut:
+    freeze_video_expert: true
+    start_timestep: null
+    step_size: 1.0
+  one_step_shortcut_official:
+    num_denoise_steps: 128
+    bootstrap_ratio: 0.75
+
+# scheduler
+lr_scheduler_type: "cosine"
+learning_rate: 1e-4
+num_epochs: 1
+max_steps: 2000
+log_every: 10
+save_every: 1000
+eval_every: 0
+save_training_state: false
+
+# training
+gradient_accumulation_steps: 1
+weight_decay: 1e-2
+resume: ./checkpoints/fastwam_release/libero_uncond_2cam224.pt
+
+wandb:
+  enabled: false

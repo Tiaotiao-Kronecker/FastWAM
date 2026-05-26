@@ -56,6 +56,19 @@ class FastWAMOneStepShortcut(FastWAMOneStepAction):
         self.action_expert.shortcut_step_embedding.to(device=self.device, dtype=self.torch_dtype)
         self.action_expert.shortcut_step_projection.to(device=self.device, dtype=self.torch_dtype)
 
+    def configure_trainable_parameters(self):
+        super().configure_trainable_parameters()
+        self._install_shortcut_step_conditioner()
+        self.action_expert.shortcut_step_embedding.train()
+        self.action_expert.shortcut_step_projection.train()
+        self.action_expert.shortcut_step_embedding.requires_grad_(True)
+        self.action_expert.shortcut_step_projection.requires_grad_(True)
+
+    def extra_trainable_parameters(self):
+        self._install_shortcut_step_conditioner()
+        yield from self.action_expert.shortcut_step_embedding.parameters()
+        yield from self.action_expert.shortcut_step_projection.parameters()
+
     def _build_shortcut_step_size(self, batch_size: int, dtype: torch.dtype) -> torch.Tensor:
         step_size = float(self.shortcut_step_size)
         if step_size <= 0.0 or step_size > 1.0:

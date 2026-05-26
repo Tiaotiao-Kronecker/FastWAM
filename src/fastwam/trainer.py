@@ -43,6 +43,7 @@ class Wan22Trainer:
         self.save_every = int(cfg.save_every)
         self.eval_every = int(cfg.eval_every)
         self.eval_num_inference_steps = int(cfg.eval_num_inference_steps)
+        self.save_training_state = bool(cfg.get("save_training_state", True))
         self.gradient_accumulation_steps = int(cfg.gradient_accumulation_steps)
         self.max_grad_norm = float(cfg.max_grad_norm)
         self.seed = int(cfg.seed)
@@ -92,6 +93,18 @@ class Wan22Trainer:
         proprio_encoder = getattr(self.model, "proprio_encoder", None)
         if proprio_encoder is not None:
             trainable_params.extend([p for p in proprio_encoder.parameters() if p.requires_grad])
+        extra_trainable_parameters = getattr(self.model, "extra_trainable_parameters", None)
+        if callable(extra_trainable_parameters):
+            trainable_params.extend([p for p in extra_trainable_parameters() if p.requires_grad])
+        deduped_trainable_params = []
+        seen_trainable_param_ids = set()
+        for param in trainable_params:
+            param_id = id(param)
+            if param_id in seen_trainable_param_ids:
+                continue
+            seen_trainable_param_ids.add(param_id)
+            deduped_trainable_params.append(param)
+        trainable_params = deduped_trainable_params
         if not trainable_params:
             raise ValueError("No trainable parameters found after applying train-mode policy.")
         self.optimizer = torch.optim.AdamW(
@@ -600,12 +613,14 @@ class Wan22Trainer:
             ckpt_path = self._save_weights_checkpoint(step_tag=step_tag)
         self.accelerator.wait_for_everyone()
 
-        state_path = os.path.join(self.state_dir, step_tag)
-        ensure_dir(state_path)
-        self.accelerator.save_state(output_dir=state_path)
-        if self.accelerator.is_main_process:
-            self._save_trainer_state(state_path)
-        self.accelerator.wait_for_everyone()
+        state_path = None
+        if self.save_training_state:
+            state_path = os.path.join(self.state_dir, step_tag)
+            ensure_dir(state_path)
+            self.accelerator.save_state(output_dir=state_path)
+            if self.accelerator.is_main_process:
+                self._save_trainer_state(state_path)
+            self.accelerator.wait_for_everyone()
 
         return {"weights_path": ckpt_path, "state_path": state_path}
 

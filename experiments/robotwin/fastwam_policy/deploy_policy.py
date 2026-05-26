@@ -182,7 +182,7 @@ class WorldActionRobotWinPolicy:
         self.pending_actions: deque[np.ndarray] = deque()
         self.episode_count = 0
         self.step_count = 0
-        self._timing_rollout = {"infer_s": 0.0, "sim_s": 0.0}
+        self._timing_rollout = {"infer_s": 0.0, "sim_s": 0.0, "infer_count": 0.0}
 
         logger.info(
             "Initialized WorldActionRobotWinPolicy | ckpt=%s | stats=%s | horizon=%d | replan=%d",
@@ -259,6 +259,7 @@ class WorldActionRobotWinPolicy:
             pred = self.model.infer_action(**infer_kwargs)
         if self.timing_enabled:
             self._timing_rollout["infer_s"] += time.perf_counter() - infer_t0
+            self._timing_rollout["infer_count"] += 1.0
 
         action_tensor = pred["action"]  # [T, D]
         action_chunk = self._denormalize_action(action_tensor)[0]  # [T, D]
@@ -297,11 +298,16 @@ class WorldActionRobotWinPolicy:
     def reset_timing_rollout(self) -> None:
         self._timing_rollout["infer_s"] = 0.0
         self._timing_rollout["sim_s"] = 0.0
+        self._timing_rollout["infer_count"] = 0.0
 
     def get_timing_rollout(self) -> Dict[str, float]:
+        infer_count = float(self._timing_rollout["infer_count"])
+        infer_s = float(self._timing_rollout["infer_s"])
         return {
-            "infer_s": float(self._timing_rollout["infer_s"]),
+            "infer_s": infer_s,
             "sim_s": float(self._timing_rollout["sim_s"]),
+            "infer_count": infer_count,
+            "infer_avg_s": infer_s / infer_count if infer_count > 0 else 0.0,
         }
 
     def reset(self) -> None:

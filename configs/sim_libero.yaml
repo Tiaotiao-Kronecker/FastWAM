@@ -25,6 +25,9 @@ EVALUATION:
   replan_steps: 10
   binarize_gripper: true
   use_action_ensembler: false
+  save_rollout_video: true
+  save_action_trace: false
+  trial_indices: null
   visualize_future_video: false
 
   # Action inference

@@ -1,0 +1,1219 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ZipMotion 与 FastWAM 集成方案</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --soft: #eef3f7;
+      --ink: #16212c;
+      --muted: #5e6b78;
+      --line: #d9e2ea;
+      --blue: #255d91;
+      --green: #28765f;
+      --red: #9b3d3d;
+      --amber: #8b661f;
+      --purple: #68539a;
+      --code-bg: #101820;
+      --code-ink: #e8eef3;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
+      line-height: 1.65;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 292px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 26px 18px;
+      overflow: auto;
+      border-right: 1px solid var(--line);
+      background: #fff;
+    }
+
+    nav h2 {
+      margin: 0 0 14px;
+      font-size: 18px;
+      line-height: 1.3;
+    }
+
+    nav a {
+      display: block;
+      padding: 7px 8px;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    nav a:hover {
+      background: var(--soft);
+      color: var(--blue);
+    }
+
+    main {
+      width: min(1220px, 100%);
+      padding: 34px 34px 80px;
+    }
+
+    header, section {
+      margin: 0 0 22px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(28px, 4vw, 42px);
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 25px;
+      line-height: 1.28;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 22px 0 10px;
+      font-size: 18px;
+      line-height: 1.36;
+      letter-spacing: 0;
+    }
+
+    h4 {
+      margin: 16px 0 8px;
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+
+    p { margin: 10px 0; }
+
+    .lead {
+      max-width: 930px;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .tag {
+      padding: 4px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: #fbfcfe;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+
+    .card h3 {
+      margin-top: 0;
+    }
+
+    .callout {
+      padding: 13px 15px;
+      border-left: 4px solid var(--blue);
+      border-radius: 6px;
+      background: #eef5fb;
+      color: #22384e;
+    }
+
+    .warning {
+      border-left-color: var(--red);
+      background: #fbefef;
+      color: #4d2222;
+    }
+
+    .ok {
+      border-left-color: var(--green);
+      background: #edf7f3;
+      color: #203d34;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      background: #f2f6f9;
+      text-align: left;
+    }
+
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    pre {
+      margin: 12px 0;
+      padding: 14px;
+      border-radius: 7px;
+      background: var(--code-bg);
+      color: var(--code-ink);
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.5;
+      tab-size: 2;
+    }
+
+    .formula {
+      background: #f7fafc;
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+
+    .formula-card {
+      margin: 15px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .formula-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #f2f6f9;
+    }
+
+    .formula-head strong {
+      font-size: 15px;
+    }
+
+    .formula-body {
+      padding: 14px;
+    }
+
+    .source {
+      color: var(--blue);
+      font-size: 13px;
+      text-align: right;
+      text-decoration: none;
+    }
+
+    .source:hover { text-decoration: underline; }
+
+    .param-list, .step-list {
+      display: grid;
+      grid-template-columns: minmax(150px, 260px) minmax(0, 1fr);
+      gap: 7px 12px;
+      margin: 12px 0;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fbfcfe;
+      font-size: 14px;
+    }
+
+    .param-list dt, .step-list dt {
+      margin: 0;
+      color: var(--blue);
+      font-weight: 700;
+    }
+
+    .param-list dd, .step-list dd {
+      margin: 0;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .diagram-wrap {
+      margin: 16px 0 8px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+      overflow-x: auto;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin-right: 5px;
+      border-radius: 50%;
+      vertical-align: -1px;
+    }
+
+    .blue { background: var(--blue); }
+    .green { background: var(--green); }
+    .red { background: var(--red); }
+    .amber { background: var(--amber); }
+    .purple { background: var(--purple); }
+
+    ul { padding-left: 22px; }
+
+    @media (max-width: 980px) {
+      .layout { display: block; }
+      nav {
+        position: relative;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      main { padding: 24px 16px 60px; }
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      .param-list, .step-list { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav aria-label="页面导航">
+      <h2>ZipMotion + FastWAM</h2>
+      <a href="#goal">1. 目标与结论</a>
+      <a href="#principles">2. 关键原则</a>
+      <a href="#representations">3. 表示差异</a>
+      <a href="#architecture">4. 总体架构</a>
+      <a href="#multicam">5. 多相机融合</a>
+      <a href="#fastwam-hooks">6. FastWAM 接入点</a>
+      <a href="#plan-a">7. 方案 A：Context Token Adapter</a>
+      <a href="#plan-b">8. 方案 B：Gated Cross-Attn</a>
+      <a href="#plan-c">9. 方案 C：Motion Expert</a>
+      <a href="#training">10. 训练路线</a>
+      <a href="#inference">11. 推理路线</a>
+      <a href="#implementation">12. 工程改动</a>
+      <a href="#ablation">13. 实验与风险</a>
+      <a href="#appendix">14. 公式与源码索引</a>
+    </nav>
+
+    <main>
+      <header id="goal">
+        <h1>ZipMotion / ZipMo 与 FastWAM 集成方案</h1>
+        <p class="lead">
+          本文把之前关于 ZipMotion 和 FastWAM 的讨论整理成可执行的技术方案。核心目标不是只在 Bridge、DROID、LIBERO 或 RoboTwin 数据集内提升，
+          而是让 motion embedding 真正帮助下游机械臂策略，最终能迁移到真机。
+        </p>
+        <div class="meta">
+          <span class="tag">无 CDN / 无外部脚本</span>
+          <span class="tag">适合 VS Code Live Preview</span>
+          <span class="tag">日期：2026-05-14</span>
+          <span class="tag">来源：docs/qa 与 docs/plan 归档</span>
+        </div>
+      </header>
+
+      <section>
+        <h2>1. 目标与当前结论</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h3>我们要解决的问题</h3>
+            <p>
+              ZipMotion / ZipMo 擅长从点追踪轨迹中学习 long-term motion embedding。
+              FastWAM 擅长在当前图像、语言和 proprio 条件下生成 action chunk。
+              集成目标是让 FastWAM 的 action expert 能读取 ZipMotion 预测的 future-motion tokens，从而改善动作生成。
+            </p>
+          </div>
+          <div class="card">
+            <h3>当前推荐路线</h3>
+            <p>
+              第一版优先做 <strong>Context Token Adapter</strong>：把 ZipMotion motion tokens 投影到 FastWAM 的 context 维度，
+              拼到 text/proprio context 后面，让 action/video expert 通过已有 cross attention 读取。
+            </p>
+          </div>
+        </div>
+
+        <div class="callout ok">
+          最小可行方案：先离线预计算或 mock 出 <code>motion_tokens</code>，增加 <code>motion_proj: Linear(d_z, 4096)</code>，
+          在 <code>FastWAM.build_inputs</code> 和 <code>infer_action</code> 中 append motion context，保持原 action flow loss 不变。
+        </div>
+
+        <pre class="formula"><code>核心数据流：
+
+当前/历史观测
+  -> ZipMotion causal predictor
+  -> predicted motion tokens
+  -> motion_proj 到 4096 维
+  -> concat(text_context, proprio_context, motion_context)
+  -> FastWAM action expert cross-attention
+  -> action flow prediction
+  -> action chunk</code></pre>
+      </section>
+
+      <section id="principles">
+        <h2>2. 关键原则</h2>
+        <div class="grid-3">
+          <div class="card">
+            <h3>不能泄漏未来</h3>
+            <p>未来真实 tracks 可以作为训练 target，但不能作为 policy input。训练和推理输入必须都来自当前或历史可观测信息。</p>
+          </div>
+          <div class="card">
+            <h3>核心表示要泛化</h3>
+            <p>不建议把 <code>E_DROID</code>、<code>E_Bridge</code>、<code>E_LIBERO</code> 这类 dataset id 放进核心 motion reasoning。</p>
+          </div>
+          <div class="card">
+            <h3>先小改动验证</h3>
+            <p>第一版不要重写 MoT，也不要替换 FastWAM 视频输入。先把 ZipMotion 当额外 context 或 adapter 接入。</p>
+          </div>
+        </div>
+
+        <h3>推荐使用的可部署条件</h3>
+        <div class="pill-row">
+          <span class="pill">camera role: external / wrist / overhead</span>
+          <span class="pill">camera intrinsics / extrinsics</span>
+          <span class="pill">control frequency</span>
+          <span class="pill">action frame convention</span>
+          <span class="pill">robot / gripper descriptor</span>
+          <span class="pill">proprio schema mask</span>
+        </div>
+
+        <div class="callout warning">
+          per-dataset adapter 可以存在，但应放在输入输出边界，用来处理 action space、proprio schema、相机格式和控制频率差异。
+          不要让核心策略依赖某个 dataset id 才能工作。
+        </div>
+      </section>
+
+      <section id="representations">
+        <h2>3. ZipMotion 与 FastWAM 的表示差异</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>维度</th>
+              <th>ZipMotion / ZipMo</th>
+              <th>FastWAM</th>
+              <th>集成含义</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>核心对象</td>
+              <td>start frame + 2D point tracks</td>
+              <td>拼接视频画布 + VAE latent + action tokens</td>
+              <td>不要把 ZipMotion 当普通 image encoder，它的强项是点轨迹 motion latent。</td>
+            </tr>
+            <tr>
+              <td>多相机</td>
+              <td>每个 camera view 有自己的 image plane 和 tracks</td>
+              <td>当前 RobotWin 路径把多相机像素拼成一张画布</td>
+              <td>ZipMotion 融合应在 per-view motion latent 层做，不应直接相加 2D 坐标。</td>
+            </tr>
+            <tr>
+              <td>策略输入</td>
+              <td>可输出 predicted future-motion tokens</td>
+              <td>action expert 可 cross-attend 到 context tokens</td>
+              <td>最自然接入点是 FastWAM 的 context/cross-attention 通路。</td>
+            </tr>
+            <tr>
+              <td>训练目标</td>
+              <td>track reconstruction / future motion prediction / action alignment</td>
+              <td>video/action continuous flow matching</td>
+              <td>第一版保持 FastWAM action flow loss，ZipMotion 可先冻结。</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <pre class="formula"><code>ZipMotion 形式：
+
+z = ZipMoVAE.encode(start_frame, tracks_yx, visibility, certainty)
+future_tracks = ZipMoDecoder(z, query_points, start_frame)
+
+FastWAM action 形式：
+
+A_sigma = (1 - sigma) * A_0 + sigma * epsilon
+target_action = epsilon - A_0
+pred_action_flow = FastWAM(video_first_frame, context, A_sigma, timestep)</code></pre>
+      </section>
+
+      <section id="architecture">
+        <h2>4. 总体架构图</h2>
+        <div class="diagram-wrap">
+          <svg width="1130" height="600" viewBox="0 0 1130 600" role="img" aria-label="ZipMotion FastWAM integration diagram">
+            <defs>
+              <marker id="arrow-blue-zf" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#255d91"></path>
+              </marker>
+              <marker id="arrow-green-zf" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#28765f"></path>
+              </marker>
+              <marker id="arrow-red-zf" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#9b3d3d"></path>
+              </marker>
+              <marker id="arrow-amber-zf" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#8b661f"></path>
+              </marker>
+              <style>
+                .zf-box { fill: #fff; stroke: #d9e2ea; stroke-width: 1.5; rx: 8; }
+                .zf-blue { fill: #eef5fb; stroke: #9ebbd4; stroke-width: 1.5; rx: 8; }
+                .zf-green { fill: #edf7f3; stroke: #8abbaa; stroke-width: 1.5; rx: 8; }
+                .zf-red { fill: #fbefef; stroke: #d6a0a0; stroke-width: 1.5; rx: 8; }
+                .zf-amber { fill: #fbf6e8; stroke: #d4bd7d; stroke-width: 1.5; rx: 8; }
+                .zf-purple { fill: #f0edf8; stroke: #b5a7d6; stroke-width: 1.5; rx: 8; }
+                .zf-label { font: 600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; fill: #16212c; }
+                .zf-small { font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; fill: #5e6b78; }
+                .zf-blue-line { stroke: #255d91; stroke-width: 2.2; fill: none; marker-end: url(#arrow-blue-zf); }
+                .zf-green-line { stroke: #28765f; stroke-width: 2.2; fill: none; marker-end: url(#arrow-green-zf); }
+                .zf-red-line { stroke: #9b3d3d; stroke-width: 2.2; fill: none; marker-end: url(#arrow-red-zf); }
+                .zf-amber-line { stroke: #8b661f; stroke-width: 2.2; fill: none; marker-end: url(#arrow-amber-zf); }
+              </style>
+            </defs>
+
+            <rect class="zf-blue" x="24" y="44" width="170" height="76"></rect>
+            <text class="zf-label" x="42" y="75">External camera</text>
+            <text class="zf-small" x="42" y="99">stable global view</text>
+
+            <rect class="zf-blue" x="24" y="164" width="170" height="76"></rect>
+            <text class="zf-label" x="42" y="195">Wrist camera</text>
+            <text class="zf-small" x="42" y="219">contact local view</text>
+
+            <rect class="zf-amber" x="250" y="44" width="175" height="76"></rect>
+            <text class="zf-label" x="268" y="75">Tracker per view</text>
+            <text class="zf-small" x="268" y="99">tracks / visibility</text>
+
+            <rect class="zf-amber" x="250" y="164" width="175" height="76"></rect>
+            <text class="zf-label" x="268" y="195">Tracker per view</text>
+            <text class="zf-small" x="268" y="219">tracks / visibility</text>
+
+            <rect class="zf-purple" x="482" y="44" width="180" height="76"></rect>
+            <text class="zf-label" x="500" y="75">ZipMo encode ext</text>
+            <text class="zf-small" x="500" y="99">z_ext</text>
+
+            <rect class="zf-purple" x="482" y="164" width="180" height="76"></rect>
+            <text class="zf-label" x="500" y="195">ZipMo encode wrist</text>
+            <text class="zf-small" x="500" y="219">z_wrist</text>
+
+            <rect class="zf-purple" x="718" y="92" width="180" height="102"></rect>
+            <text class="zf-label" x="736" y="126">Gated residual</text>
+            <text class="zf-small" x="736" y="150">z_ext + gate * delta</text>
+            <text class="zf-small" x="736" y="172">z_motion</text>
+
+            <rect class="zf-green" x="950" y="92" width="156" height="102"></rect>
+            <text class="zf-label" x="968" y="126">motion_proj</text>
+            <text class="zf-small" x="968" y="150">d_z to 4096</text>
+            <text class="zf-small" x="968" y="172">C_motion</text>
+
+            <rect class="zf-green" x="24" y="352" width="170" height="76"></rect>
+            <text class="zf-label" x="42" y="383">Text context</text>
+            <text class="zf-small" x="42" y="407">C_text</text>
+
+            <rect class="zf-green" x="250" y="352" width="175" height="76"></rect>
+            <text class="zf-label" x="268" y="383">Proprio context</text>
+            <text class="zf-small" x="268" y="407">C_prop</text>
+
+            <rect class="zf-green" x="482" y="352" width="180" height="76"></rect>
+            <text class="zf-label" x="500" y="383">Concat context</text>
+            <text class="zf-small" x="500" y="407">C' = text + prop + motion</text>
+
+            <rect class="zf-red" x="718" y="320" width="180" height="140"></rect>
+            <text class="zf-label" x="736" y="356">FastWAM Action Expert</text>
+            <text class="zf-small" x="736" y="380">action noising</text>
+            <text class="zf-small" x="736" y="402">MoT with video tokens</text>
+            <text class="zf-small" x="736" y="424">cross-attend context</text>
+
+            <rect class="zf-red" x="950" y="352" width="156" height="76"></rect>
+            <text class="zf-label" x="968" y="383">Action chunk</text>
+            <text class="zf-small" x="968" y="407">policy output</text>
+
+            <path class="zf-blue-line" d="M194 82 L250 82"></path>
+            <path class="zf-blue-line" d="M194 202 L250 202"></path>
+            <path class="zf-amber-line" d="M425 82 L482 82"></path>
+            <path class="zf-amber-line" d="M425 202 L482 202"></path>
+            <path class="zf-amber-line" d="M662 82 C690 88, 704 104, 718 120"></path>
+            <path class="zf-amber-line" d="M662 202 C690 196, 704 178, 718 156"></path>
+            <path class="zf-green-line" d="M898 143 L950 143"></path>
+            <path class="zf-green-line" d="M1028 194 C1028 260, 650 282, 572 352"></path>
+            <path class="zf-green-line" d="M194 390 L250 390"></path>
+            <path class="zf-green-line" d="M425 390 L482 390"></path>
+            <path class="zf-green-line" d="M662 390 L718 390"></path>
+            <path class="zf-red-line" d="M898 390 L950 390"></path>
+          </svg>
+          <div class="legend">
+            <span><span class="dot blue"></span>相机观测</span>
+            <span><span class="dot amber"></span>点追踪与 ZipMotion</span>
+            <span><span class="dot green"></span>FastWAM context</span>
+            <span><span class="dot red"></span>动作生成</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="multicam">
+        <h2>5. 多相机融合：external 主干，wrist 残差</h2>
+        <p>
+          之前讨论的结论是：external camera 通常更稳定、视野更大，更适合作为主 motion latent；
+          wrist camera 变化快、遮挡和模糊多，但对末端接触、抓取细节有价值，应作为 gated residual correction。
+        </p>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>多相机 ZipMotion latent 融合</strong>
+            <span class="source">latent/token 层，不是像素层</span>
+          </div>
+          <div class="formula-body">
+            <pre class="formula"><code>z_ext   = ZipMoVAE.encode(start_ext_frame, tracks_ext, visibility_ext)
+z_wrist = ZipMoVAE.encode(start_wrist_frame, tracks_wrist, visibility_wrist)
+
+delta = CrossAttention(query=z_ext, key=z_wrist, value=z_wrist)
+gate  = sigmoid(MLP(pool(z_ext), pool(z_wrist), proprio, camera_meta))
+
+z_motion = z_ext + gate * delta</code></pre>
+            <dl class="param-list">
+              <dt><code>z_ext</code></dt>
+              <dd>external camera 的 motion latent，是主干表示。</dd>
+              <dt><code>z_wrist</code></dt>
+              <dd>wrist camera 的 motion latent，提供局部接触和遮挡恢复信息。</dd>
+              <dt><code>delta</code></dt>
+              <dd>wrist 信息对 external motion latent 的修正项。</dd>
+              <dt><code>gate</code></dt>
+              <dd>控制 wrist residual 的强弱，建议初始化偏小，并配合 view dropout。</dd>
+              <dt><code>z_motion</code></dt>
+              <dd>最终传给 FastWAM 的 predicted motion tokens。</dd>
+            </dl>
+          </div>
+        </div>
+
+        <div class="callout warning">
+          external tracks 和 wrist tracks 不在同一个 image plane，通常没有稳定的一一对应 point identity。
+          因此不能直接把两个视角的 2D tracks 相加，也不建议做像素级残差。
+        </div>
+      </section>
+
+      <section id="fastwam-hooks">
+        <h2>6. FastWAM 当前可利用的接入点</h2>
+        <p>
+          FastWAM 已经有 context/cross-attention 通路。文本 context 和 proprio token 被拼成 <code>context</code>，
+          分别送入 video expert 和 action expert 的 <code>text_embedding</code>，再作为 cross-attention 的 key/value。
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>接入点</th>
+              <th>源码</th>
+              <th>含义</th>
+              <th>ZipMotion 可以怎么接</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>append proprio context</td>
+              <td><a href="../src/fastwam/models/wan22/fastwam.py">fastwam.py:219-240</a></td>
+              <td>把 proprio 投影成一个 4096 维 context token。</td>
+              <td>照这个模式新增 <code>_append_motion_to_context</code>。</td>
+            </tr>
+            <tr>
+              <td>training build_inputs</td>
+              <td><a href="../src/fastwam/models/wan22/fastwam.py">fastwam.py:277-383</a></td>
+              <td>读取 video/action/context/proprio 并转到 device。</td>
+              <td>从 sample 读取 <code>motion_tokens</code> 和 <code>motion_mask</code>。</td>
+            </tr>
+            <tr>
+              <td>ActionDiT context projection</td>
+              <td><a href="../src/fastwam/models/wan22/action_dit.py">action_dit.py:226-299</a></td>
+              <td>把 4096 维 context 投到 action hidden dim 1024。</td>
+              <td>motion context 拼进去后不需要改这段。</td>
+            </tr>
+            <tr>
+              <td>VideoDiT context projection</td>
+              <td><a href="../src/fastwam/models/wan22/wan_video_dit.py">wan_video_dit.py:509-620</a></td>
+              <td>把 4096 维 context 投到 video hidden dim 3072。</td>
+              <td>如果训练 video 分支，也能读 motion context。</td>
+            </tr>
+            <tr>
+              <td>CrossAttention</td>
+              <td><a href="../src/fastwam/models/wan22/wan_video_dit.py">wan_video_dit.py:198-220</a></td>
+              <td>expert token 作为 query，context 作为 key/value。</td>
+              <td>motion tokens 变成 context 后自然被读取。</td>
+            </tr>
+            <tr>
+              <td>MoT mask</td>
+              <td><a href="../src/fastwam/models/wan22/fastwam.py">fastwam.py:385-407</a></td>
+              <td>控制 video/action token 之间的 self-attention。</td>
+              <td>方案 A 不需要改 MoT mask。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="plan-a">
+        <h2>7. 方案 A：Context Token Adapter</h2>
+        <p>
+          这是第一优先级方案。它把 ZipMotion 输出的 motion tokens 当作 FastWAM context 的新增部分，
+          最大优点是不用改 MoT 结构、不用改 attention mask、不影响 video KV cache 的基本设计。
+        </p>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>数学形式</strong>
+            <span class="source">对应 FastWAM context/cross-attention 通路</span>
+          </div>
+          <div class="formula-body">
+            <pre class="formula"><code>Z_motion in R[B, L_m, d_z]
+
+C_motion = Z_motion W_m + b_m
+C_motion in R[B, L_m, 4096]
+
+C_prime = concat(C_text, C_prop, C_motion)
+M_prime = concat(M_text, M_prop, M_motion)
+
+Action cross-attention:
+Q = W_q X_action
+K = W_k C_prime
+V = W_v C_prime
+Attn = softmax(Q K^T / sqrt(d_h) + mask) V</code></pre>
+            <dl class="param-list">
+              <dt><code>Z_motion</code></dt>
+              <dd>ZipMotion predictor 输出的 predicted motion tokens。</dd>
+              <dt><code>L_m</code></dt>
+              <dd>motion token 数量，可由轨迹点数、时间压缩方式或 latent token 数决定。</dd>
+              <dt><code>d_z</code></dt>
+              <dd>ZipMotion motion token 原始维度。</dd>
+              <dt><code>W_m, b_m</code></dt>
+              <dd>新增的 motion projector，第一版可以是 <code>nn.Linear(d_z, 4096)</code>。</dd>
+              <dt><code>C_prime</code></dt>
+              <dd>扩展后的 FastWAM context，会被 ActionDiT/VideoDiT 内部 MLP 投到各自 hidden dim。</dd>
+            </dl>
+          </div>
+        </div>
+
+        <h3>建议新增模块</h3>
+        <pre><code>src/fastwam/models/wan22/zipmotion_context.py</code></pre>
+
+        <pre><code>class MotionContextProjector(nn.Module):
+    def __init__(self, motion_dim: int, text_dim: int = 4096):
+        super().__init__()
+        self.proj = nn.Sequential(
+            nn.LayerNorm(motion_dim),
+            nn.Linear(motion_dim, text_dim),
+        )
+
+    def forward(self, motion_tokens):
+        # motion_tokens: [B, L_m, d_z]
+        return self.proj(motion_tokens)  # [B, L_m, 4096]</code></pre>
+
+        <h3>FastWAM 内部新增函数</h3>
+        <pre><code>def _append_motion_to_context(self, context, context_mask, motion_tokens, motion_mask=None):
+    if self.motion_proj is None or motion_tokens is None:
+        return context, context_mask
+
+    motion_tokens = motion_tokens.to(device=self.device, dtype=context.dtype)
+    motion_context = self.motion_proj(motion_tokens)  # [B, L_m, 4096]
+
+    if motion_mask is None:
+        motion_mask = torch.ones(
+            (context.shape[0], motion_context.shape[1]),
+            dtype=torch.bool,
+            device=context_mask.device,
+        )
+    else:
+        motion_mask = motion_mask.to(device=context_mask.device, dtype=torch.bool)
+
+    return (
+        torch.cat([context, motion_context], dim=1),
+        torch.cat([context_mask, motion_mask], dim=1),
+    )</code></pre>
+
+        <h3>第一版训练策略</h3>
+        <ul>
+          <li>冻结 ZipMotion predictor，只训练 <code>motion_proj</code> 和 FastWAM action 相关参数。</li>
+          <li>先不改变 video loss，不改变 MoT attention mask。</li>
+          <li>保持原 action flow loss，验证 motion context 是否被 action expert 利用。</li>
+          <li>先用 mock/offline motion tokens 做 smoke，确认 shape、mask、forward/backward 都通。</li>
+        </ul>
+
+        <pre class="formula"><code>第一版 loss：
+
+L = L_action_flow
+
+可选第二步：
+
+L = L_action_flow + lambda_motion * L_motion_aux</code></pre>
+      </section>
+
+      <section id="plan-b">
+        <h2>8. 方案 B：Gated Cross-Attention Injection</h2>
+        <p>
+          如果方案 A 有收益但利用强度不足，再做方案 B。它不是把 motion tokens 混入通用 context，
+          而是在 action expert 若干层中显式加入 motion cross-attention adapter。
+        </p>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>动作层内注入公式</strong>
+            <span class="source">第二阶段，不建议第一版直接做</span>
+          </div>
+          <div class="formula-body">
+            <pre class="formula"><code>R_l = CrossAttention(query=LN(h_action_l), key=z_motion_l, value=z_motion_l)
+g_l = sigmoid(MLP(pool(h_action_l), pool(z_motion_l), proprio))
+
+h_action_l = h_action_l + alpha_l * g_l * R_l</code></pre>
+            <dl class="param-list">
+              <dt><code>h_action_l</code></dt>
+              <dd>第 l 层 action expert token。</dd>
+              <dt><code>R_l</code></dt>
+              <dd>motion adapter 读出的 residual。</dd>
+              <dt><code>g_l</code></dt>
+              <dd>样本相关或 token 相关 gate，控制 motion 信息强度。</dd>
+              <dt><code>alpha_l</code></dt>
+              <dd>可学习标量，建议初始化为 0 或很小，使初始模型近似原 FastWAM。</dd>
+            </dl>
+          </div>
+        </div>
+
+        <h3>插入位置选择</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>位置</th>
+              <th>优点</th>
+              <th>代价</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>ActionDiT block 内 cross-attn 后</td>
+              <td>语义清楚，motion adapter 是额外条件。</td>
+              <td>需要改 action expert block，训练和推理路径都要同步。</td>
+            </tr>
+            <tr>
+              <td>MoT post-block 后</td>
+              <td>可以在 video/action mixed attention 后再修正 action token。</td>
+              <td>需要改 <code>MoT._apply_expert_post_block</code> 或新增 action-only post hook。</td>
+            </tr>
+            <tr>
+              <td>只在高层注入</td>
+              <td>减少开销，降低破坏原模型风险。</td>
+              <td>可能利用不充分，需要 ablation 注入层数。</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout">
+          方案 B 的关键是 gate 初始化。初始时让 adapter 近似无效，先稳定复现 baseline，再逐步学习 motion correction。
+        </div>
+      </section>
+
+      <section id="plan-c">
+        <h2>9. 方案 C：Motion Expert 加入 MoT</h2>
+        <p>
+          这是更激进的方案，不建议第一版做。它把 motion tokens 当作第三类 expert token 放进 MoT。
+        </p>
+
+        <pre><code>mixtures = {
+    "video": video_expert,
+    "action": action_expert,
+    "motion": motion_expert,
+}</code></pre>
+
+        <h3>为什么不优先</h3>
+        <ul>
+          <li>motion expert 需要和 video/action expert 对齐 layer 数、head 数、head dim。</li>
+          <li>需要重新设计 video/action/motion 三方 attention mask。</li>
+          <li>推理中的 video KV cache 逻辑要扩展为 video/motion cache 或 action-with-motion cache。</li>
+          <li>调试复杂度明显高于 Context Token Adapter。</li>
+        </ul>
+      </section>
+
+      <section id="training">
+        <h2>10. 训练路线</h2>
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>Phase 0：轨迹预处理</strong>
+            <span class="source">Bridge / DROID / 自采真机</span>
+          </div>
+          <div class="formula-body">
+            <pre><code>per episode:
+  for each camera view:
+    video frames
+    -> tracker
+    -> tracks_yx.npy
+    -> visibility.npy
+    -> certainty.npy
+    -> camera_role / optional intrinsics / extrinsics</code></pre>
+            <p>所有相机独立跑 tracker，保存 per-view tracks。统一 camera role 命名：external、wrist、overhead、left_static、right_static。</p>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>Phase 1：机器人版 ZipMotion 微调</strong>
+            <span class="source">让 motion embedding 更 action-relevant</span>
+          </div>
+          <div class="formula-body">
+            <pre class="formula"><code>z_ext   = ZipMoVAE.encode(tracks_ext, start_ext_frame)
+z_wrist = ZipMoVAE.encode(tracks_wrist, start_wrist_frame)
+z_motion = z_ext + gate * CrossAttn(z_ext &lt;- z_wrist, proprio)
+
+L_zipmotion =
+    lambda_ext    * L_track_ext
+  + lambda_wrist  * L_track_wrist
+  + lambda_action * L_action_align</code></pre>
+            <dl class="param-list">
+              <dt><code>L_track_ext</code></dt>
+              <dd>external view 的 future track reconstruction / prediction loss。</dd>
+              <dt><code>L_track_wrist</code></dt>
+              <dd>wrist view 的 future track reconstruction / prediction loss。</dd>
+              <dt><code>L_action_align</code></dt>
+              <dd>motion latent 对 EEF/action chunk 或 action representation 的辅助对齐。</dd>
+            </dl>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>Phase 2：接入 FastWAM Context Token Adapter</strong>
+            <span class="source">最小侵入式验证</span>
+          </div>
+          <div class="formula-body">
+            <pre><code>training sample:
+  video
+  action
+  proprio
+  text context
+  predicted motion_tokens
+  motion_mask</code></pre>
+            <pre class="formula"><code>context = concat(text_context, proprio_context, motion_context)
+L = L_action_flow</code></pre>
+            <p>第一版冻结 ZipMotion predictor，训练 motion projector 和 FastWAM action 相关参数。</p>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>Phase 3：Gated Cross-Attn Adapter</strong>
+            <span class="source">当方案 A 有收益后再做</span>
+          </div>
+          <div class="formula-body">
+            <pre><code>open trainable params:
+  motion adapter
+  gate / alpha
+  action expert small LR
+  optional MoT post-block hook</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="inference">
+        <h2>11. 推理路线</h2>
+        <p>
+          推理时不能用未来真实 tracks。必须从当前或历史观测预测 motion tokens，再交给 FastWAM。
+        </p>
+
+        <pre><code>input at real robot time t:
+  current / historical camera frames
+  current proprio
+  task language
+
+causal motion path:
+  frames up to t
+  -> tracker or online track predictor
+  -> ZipMotion predictor
+  -> predicted motion_tokens
+  -> motion_proj
+  -> append to FastWAM context
+
+FastWAM action path:
+  current image -> VAE first-frame latent -> video KV cache
+  random action noise -> iterative denoising
+  action expert cross-attends to text + proprio + motion context
+  output action chunk</code></pre>
+
+        <div class="callout warning">
+          如果训练时 motion tokens 来自未来 GT tracks，而推理时只能用 predicted motion tokens，训练和部署分布会严重不一致。
+          因此 Phase 2 的 FastWAM 输入应尽早使用 predicted motion tokens，而不是 oracle motion tokens。
+        </div>
+      </section>
+
+      <section id="implementation">
+        <h2>12. 工程改动清单</h2>
+        <h3>新增配置</h3>
+        <pre><code>model:
+  motion_context:
+    enabled: true
+    motion_dim: 512
+    text_dim: 4096
+    dropout: 0.1
+    source: offline  # offline | online
+    train_motion_proj: true
+    freeze_zipmotion: true</code></pre>
+
+        <h3>新增或修改文件</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>文件</th>
+              <th>改动</th>
+              <th>阶段</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>src/fastwam/models/wan22/zipmotion_context.py</code></td>
+              <td>新增 <code>MotionContextProjector</code> 和可选 <code>MotionCrossAttentionAdapter</code>。</td>
+              <td>A/B</td>
+            </tr>
+            <tr>
+              <td><code>src/fastwam/models/wan22/fastwam.py</code></td>
+              <td>新增 <code>motion_proj</code>、<code>_append_motion_to_context</code>，在 <code>build_inputs</code> 和 <code>infer_action</code> 中处理 motion tokens。</td>
+              <td>A</td>
+            </tr>
+            <tr>
+              <td><code>configs/model/fastwam.yaml</code></td>
+              <td>增加 <code>motion_context</code> 开关和维度配置。</td>
+              <td>A</td>
+            </tr>
+            <tr>
+              <td>dataset / processor</td>
+              <td>让 sample 可携带 <code>motion_tokens</code>、<code>motion_mask</code>、<code>camera_role</code>。</td>
+              <td>A</td>
+            </tr>
+            <tr>
+              <td><code>src/fastwam/models/wan22/mot.py</code></td>
+              <td>仅方案 B/C 需要改，方案 A 不改。</td>
+              <td>B/C</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>最小实现顺序</h3>
+        <dl class="step-list">
+          <dt>Step 1</dt>
+          <dd>用随机或离线 mock 的 <code>motion_tokens: [B,L_m,d_z]</code> 跑通 context 拼接。</dd>
+          <dt>Step 2</dt>
+          <dd>确认 <code>context.shape[1]</code> 从 \(L+1\) 变成 \(L+1+L_m\)，<code>context_mask</code> 同步扩展。</dd>
+          <dt>Step 3</dt>
+          <dd>跑小 batch forward/backward smoke，检查 action loss 正常下降或至少无 NaN。</dd>
+          <dt>Step 4</dt>
+          <dd>接入离线 ZipMotion predicted tokens，做 baseline vs +motion ablation。</dd>
+          <dt>Step 5</dt>
+          <dd>如果有效，再做 gated cross-attention injection。</dd>
+        </dl>
+      </section>
+
+      <section id="ablation">
+        <h2>13. 实验、消融与风险</h2>
+        <h3>必须做的 ablation</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>实验</th>
+              <th>目的</th>
+              <th>预期观察</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>FastWAM baseline</td>
+              <td>确认原模型能力。</td>
+              <td>作为所有对比基线。</td>
+            </tr>
+            <tr>
+              <td>external-only ZipMotion</td>
+              <td>验证稳定外部视角 motion 是否有帮助。</td>
+              <td>通常应比 wrist-only 更稳定。</td>
+            </tr>
+            <tr>
+              <td>wrist-only ZipMotion</td>
+              <td>验证局部接触信息价值。</td>
+              <td>可能对抓取接触阶段有效，但长程稳定性较弱。</td>
+            </tr>
+            <tr>
+              <td>external 主干 + wrist residual</td>
+              <td>验证当前推荐多相机融合。</td>
+              <td>应优于简单 concat 或平权融合。</td>
+            </tr>
+            <tr>
+              <td>Context Token Adapter</td>
+              <td>验证最小接入方式。</td>
+              <td>若 motion tokens 有效，action loss 或 rollout success 应改善。</td>
+            </tr>
+            <tr>
+              <td>Gated Cross-Attn Adapter</td>
+              <td>验证更强注入是否进一步提升。</td>
+              <td>应关注稳定性和过拟合风险。</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>风险与处理</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>风险</th>
+              <th>表现</th>
+              <th>处理</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>未来信息泄漏</td>
+              <td>离线验证很好，真机或 causal eval 崩。</td>
+              <td>严格区分 predicted motion tokens 和 future GT tracks；GT 只能做 target。</td>
+            </tr>
+            <tr>
+              <td>motion tokens 被忽略</td>
+              <td>加 motion 后指标无变化。</td>
+              <td>增加 auxiliary loss、motion dropout 对照、或进入方案 B。</td>
+            </tr>
+            <tr>
+              <td>wrist 噪声伤害策略</td>
+              <td>加入 wrist 后不稳定。</td>
+              <td>external 主干、wrist gated residual、view dropout、gate 正则。</td>
+            </tr>
+            <tr>
+              <td>dataset shortcut</td>
+              <td>数据集内好，跨数据集差。</td>
+              <td>不用核心 dataset id embedding，使用 camera role 和物理描述。</td>
+            </tr>
+            <tr>
+              <td>推理延迟</td>
+              <td>ZipMotion 在线预测增加 replan latency。</td>
+              <td>先离线评估收益，再做轻量 predictor、缓存历史 tracks、降低 token 数。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="appendix">
+        <h2>14. 公式与源码索引</h2>
+        <h3>关键公式汇总</h3>
+        <pre class="formula"><code>1. ZipMotion per-view encoding
+   z_view = ZipMoVAE.encode(start_frame_view, tracks_view, visibility_view)
+
+2. External main + wrist residual
+   delta = CrossAttn(query=z_ext, key=z_wrist, value=z_wrist)
+   gate = sigmoid(MLP(z_ext, z_wrist, proprio, camera_meta))
+   z_motion = z_ext + gate * delta
+
+3. Context token adapter
+   C_motion = z_motion W_m + b_m
+   C_prime = concat(C_text, C_prop, C_motion)
+
+4. FastWAM action flow
+   A_sigma = (1 - sigma) A_0 + sigma epsilon
+   target_action = epsilon - A_0
+   L_action = MSE(pred_action_flow, target_action)
+
+5. Optional ZipMotion fine-tune loss
+   L_zipmotion =
+       lambda_ext * L_track_ext
+     + lambda_wrist * L_track_wrist
+     + lambda_action * L_action_align</code></pre>
+
+        <h3>源码参考</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>主题</th>
+              <th>路径</th>
+              <th>说明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>FastWAM 主流程</td>
+              <td><a href="../src/fastwam/models/wan22/fastwam.py">src/fastwam/models/wan22/fastwam.py</a></td>
+              <td>build_inputs、proprio context、training_loss、infer_action、MoT mask。</td>
+            </tr>
+            <tr>
+              <td>Action Expert</td>
+              <td><a href="../src/fastwam/models/wan22/action_dit.py">src/fastwam/models/wan22/action_dit.py</a></td>
+              <td>action token 化、context projection、action cross-attention payload。</td>
+            </tr>
+            <tr>
+              <td>Video Expert / CrossAttention</td>
+              <td><a href="../src/fastwam/models/wan22/wan_video_dit.py">src/fastwam/models/wan22/wan_video_dit.py</a></td>
+              <td>CrossAttention、VideoDiT pre_dit、context mask 展开。</td>
+            </tr>
+            <tr>
+              <td>MoT</td>
+              <td><a href="../src/fastwam/models/wan22/mot.py">src/fastwam/models/wan22/mot.py</a></td>
+              <td>video/action mixed self-attention、post-block cross-attention、video cache。</td>
+            </tr>
+            <tr>
+              <td>前序归档</td>
+              <td><a href="qa/2026-05-12-zipmotion-fastwam-integration-qa.md">docs/qa/2026-05-12-zipmotion-fastwam-integration-qa.md</a></td>
+              <td>讨论问答整理。</td>
+            </tr>
+            <tr>
+              <td>实施计划</td>
+              <td><a href="plan/2026-05-12-zipmotion-fastwam-integration-plan.md">docs/plan/2026-05-12-zipmotion-fastwam-integration-plan.md</a></td>
+              <td>原始计划归档。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

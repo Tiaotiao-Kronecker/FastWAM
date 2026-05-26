@@ -24,7 +24,7 @@ run_libero_eval() {
     export RUN_ID
     OUTPUT_DIR=${OUTPUT_DIR:-"$ROOT_DIR/evaluate_results/$RUN_ID"}
     export OUTPUT_DIR  # Use run_id as the output subdirectory
-    SESSION_NAME="libero_test_v3"
+    SESSION_NAME=${SESSION_NAME:-"libero_test_v3"}
     EXP_NAME=${EXP_NAME:-""}
     export EXP_NAME
 
@@ -34,9 +34,12 @@ run_libero_eval() {
     mkdir -p "$OUTPUT_DIR"
     echo "Evaluation results will be saved to: $OUTPUT_DIR"
 
-    # Copy task_list_file into OUTPUT_DIR
-    cp "$task_list_file" "$OUTPUT_DIR/"
-    task_list_file="$OUTPUT_DIR/$(basename $task_list_file)"
+    # Copy task_list_file into OUTPUT_DIR unless it is already there.
+    task_list_target="$OUTPUT_DIR/$(basename "$task_list_file")"
+    if [ "$(readlink -f "$task_list_file")" != "$(readlink -f "$task_list_target" 2>/dev/null || echo "$task_list_target")" ]; then
+        cp "$task_list_file" "$OUTPUT_DIR/"
+    fi
+    task_list_file="$task_list_target"
     echo "Task list file copied to: $task_list_file"
     
     # GPU and tmux configuration
@@ -247,6 +250,8 @@ run_libero_eval() {
     CONFIG=${CONFIG:-""}
     require_non_empty "CKPT"
     require_non_empty "CONFIG"
+    PYTHON_BIN=${PYTHON_BIN:-python}
+    export PYTHON_BIN
     # Normalize CONFIG to task/config_name.yaml
     CONFIG="${CONFIG#configs/}" # delete prefix configs/
     CONFIG="${CONFIG#task/}" # delete prefix task/
@@ -325,7 +330,7 @@ run_libero_eval() {
         local gpu_id=$3
         local pane_info=$4
         local status_file="$TASK_STATUS_DIR/${suite}_task${task_id}.status"
-        local result_file="$OUTPUT_DIR/$suite/gpu${gpu_id}_task${task_id}_results.json"
+        local result_pattern="$OUTPUT_DIR/$suite/gpu${gpu_id}_task${task_id}*.json"
         local log_file="$TASK_LOG_DIR/${suite}_task${task_id}_gpu${gpu_id}.log"
         
         rm -f "$status_file"
@@ -336,13 +341,23 @@ run_libero_eval() {
         tmux select-pane -t $SESSION_NAME:$pane_info 2>/dev/null
         tmux send-keys -t $SESSION_NAME:$pane_info "clear" C-m 2>/dev/null
         tmux send-keys -t $SESSION_NAME:$pane_info "source ~/.bashrc && cd $ROOT_DIR && export EXP_NAME=$EXP_NAME && \
-            STATUS_FILE='$status_file' LOG_FILE='$log_file' RESULT_FILE='$result_file' && \
-            CUDA_VISIBLE_DEVICES=$gpu_id python experiments/libero/eval_libero_single.py \
+            STATUS_FILE='$status_file' LOG_FILE='$log_file' RESULT_PATTERN='$result_pattern' && \
+            CUDA_VISIBLE_DEVICES=$gpu_id \
+            LIBERO_CONFIG_PATH=${LIBERO_CONFIG_PATH:-} \
+            MUJOCO_GL=${MUJOCO_GL:-} \
+            PYOPENGL_PLATFORM=${PYOPENGL_PLATFORM:-} \
+            HF_HOME=${HF_HOME:-} \
+            XDG_CACHE_HOME=${XDG_CACHE_HOME:-} \
+            MPLCONFIGDIR=${MPLCONFIGDIR:-} \
+            DIFFSYNTH_DOWNLOAD_SOURCE=${DIFFSYNTH_DOWNLOAD_SOURCE:-} \
+            DIFFSYNTH_MODEL_BASE_PATH=${DIFFSYNTH_MODEL_BASE_PATH:-} \
+            TOKENIZERS_PARALLELISM=${TOKENIZERS_PARALLELISM:-false} \
+            $PYTHON_BIN experiments/libero/eval_libero_single.py \
             task=$CONFIG ckpt=$CKPT \
             EVALUATION.task_suite_name=$suite EVALUATION.task_id=$task_id gpu_id=$gpu_id \
             EVALUATION.num_trials=$NUM_TRIALS EVALUATION.output_dir=$OUTPUT_DIR $EXTRA_ARGS > \"\$LOG_FILE\" 2>&1; \
             rc=\$?; \
-            if [ \$rc -eq 0 ] && [ -f \"\$RESULT_FILE\" ]; then \
+            if [ \$rc -eq 0 ] && ls \$RESULT_PATTERN >/dev/null 2>&1; then \
                 echo \"SUCCESS|$gpu_id|\$rc|\$(date +%s)|\$LOG_FILE\" > \"\$STATUS_FILE\"; \
             else \
                 echo \"FAILED|$gpu_id|\$rc|\$(date +%s)|\$LOG_FILE\" > \"\$STATUS_FILE\"; \
@@ -381,7 +396,7 @@ run_libero_eval() {
             [ -z "$suite" ] || [ -z "$task_id" ] && continue
 
             local status_file="$TASK_STATUS_DIR/${suite}_task${task_id}.status"
-            local any_result_pattern="$OUTPUT_DIR/$suite/gpu*_task${task_id}_results.json"
+            local any_result_pattern="$OUTPUT_DIR/$suite/gpu*_task${task_id}*.json"
 
             # The result file exists: the task succeeded, so release the mapping and GPU load
             if ls $any_result_pattern 1> /dev/null 2>&1; then
@@ -465,6 +480,14 @@ run_libero_eval() {
         task_id=$(echo $task_info | cut -d, -f2)
         
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] Processing task: suite=$suite, task_id=$task_id"
+
+        result_file_pattern="$OUTPUT_DIR/$suite/gpu*_task${task_id}*.json"
+        if ls $result_file_pattern 1> /dev/null 2>&1; then
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Task already complete, skipping initial launch: $suite task_id=$task_id"
+            grep -v "^$suite,$task_id$" "$PENDING_TASKS_FILE" > "$PENDING_TASKS_FILE.tmp" || true
+            mv "$PENDING_TASKS_FILE.tmp" "$PENDING_TASKS_FILE"
+            continue
+        fi
         
         # Find the least-loaded GPU
         gpu_id=$(find_least_loaded_gpu)
@@ -515,7 +538,7 @@ run_libero_eval() {
         fi
 
         # Check whether all tasks have completed
-        total_completed=$(find "$OUTPUT_DIR" -type f -name "gpu*_task*_results.json" | wc -l)
+        total_completed=$(find "$OUTPUT_DIR" -mindepth 2 -maxdepth 2 -type f -name "gpu*_task*.json" | wc -l)
         if [ "$total_completed" -eq "$total_tasks" ]; then
             echo "All tasks are complete!"
             break
@@ -536,7 +559,7 @@ run_libero_eval() {
             [ -z "$suite" ] && continue
 
             # Check whether the task is already complete
-            result_file_pattern="$OUTPUT_DIR/$suite/gpu*_task${task_id}_results.json"
+            result_file_pattern="$OUTPUT_DIR/$suite/gpu*_task${task_id}*.json"
             if ls $result_file_pattern 1> /dev/null 2>&1; then
                 continue
             fi
@@ -625,7 +648,7 @@ run_libero_eval() {
     echo "All tasks completed successfully!"
     # Run the result summarization script
     echo "Generating evaluation report..."
-    python experiments/libero/summarize_results.py --output_dir="$OUTPUT_DIR"
+    "$PYTHON_BIN" experiments/libero/summarize_results.py --output_dir="$OUTPUT_DIR"
 }
 
 

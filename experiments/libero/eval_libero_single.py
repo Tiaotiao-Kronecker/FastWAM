@@ -12,7 +12,7 @@ import numpy as np
 import torch
 from accelerate import PartialState
 from hydra.utils import instantiate
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 from PIL import Image
 from tqdm import tqdm
 
@@ -275,6 +275,18 @@ def _denormalize_action(action: torch.Tensor, processor: FastWAMProcessor) -> np
     return denorm.numpy()
 
 
+def _to_trace_action_array(action: Any) -> list[list[float]]:
+    if isinstance(action, torch.Tensor):
+        arr = action.detach().to(dtype=torch.float32, device="cpu").numpy()
+    else:
+        arr = np.asarray(action, dtype=np.float32)
+    if arr.ndim == 3 and arr.shape[0] == 1:
+        arr = arr[0]
+    if arr.ndim != 2:
+        raise ValueError(f"Expected action trace stage [T, D] or [1, T, D], got {tuple(arr.shape)}")
+    return arr.astype(np.float32, copy=False).tolist()
+
+
 def _get_num_video_frames(cfg: DictConfig) -> int:
     return (int(cfg.data.train.num_frames) - 1) // int(cfg.data.train.action_video_freq_ratio) + 1
 
@@ -367,7 +379,7 @@ def _predict_action_chunk(
     input_w: int,
     input_h: int,
     model_device: str,
-) -> tuple[np.ndarray, dict, Optional[list[Image.Image]]]:
+) -> tuple[np.ndarray, dict, Optional[list[Image.Image]], dict[str, list[list[float]]]]:
     num_inference_steps_cfg = cfg.EVALUATION.get("num_inference_steps", None)
     if num_inference_steps_cfg is None:
         num_inference_steps = int(cfg.get("eval_num_inference_steps", 20))
@@ -417,16 +429,23 @@ def _predict_action_chunk(
         else:
             pred = model.infer_action(**infer_kwargs)
     action = pred["action"]  # [T, D]
+    action_stages = {
+        "model_normalized": _to_trace_action_array(action),
+    }
 
     action = _denormalize_action(action, processor)[0]  # [T, D]
+    action_stages["denormalized_dataset"] = _to_trace_action_array(action)
 
     # The dataloader flips the sign of the gripper action to align with other datasets
     # (0 = close, 1 = open), so flip it back (-1 = open, +1 = close) before executing the action
     action[..., -1] = action[..., -1] * 2 - 1
+    action_stages["gripper_scaled_before_invert"] = _to_trace_action_array(action)
     action = invert_gripper_action(action)
+    action_stages["libero_continuous_before_sign"] = _to_trace_action_array(action)
     if bool(cfg.EVALUATION.get("binarize_gripper", False)):
         action[..., -1] = np.sign(action[..., -1])
-    return action, imgs, predicted_future_frames
+    action_stages["env_action"] = _to_trace_action_array(action)
+    return action, imgs, predicted_future_frames, action_stages
 
 
 def _get_max_steps(task_suite_name: str) -> int:
@@ -442,6 +461,153 @@ def _get_max_steps(task_suite_name: str) -> int:
     return suite_steps[task_suite_name]
 
 
+def _resolve_trial_indices(cfg: DictConfig) -> tuple[list[int], bool]:
+    num_trials = int(cfg.EVALUATION.num_trials)
+    trial_indices_cfg = cfg.EVALUATION.get("trial_indices", None)
+    if trial_indices_cfg is None:
+        return list(range(num_trials)), False
+
+    if isinstance(trial_indices_cfg, str):
+        value = trial_indices_cfg.strip()
+        if value == "" or value.lower() in {"none", "null"}:
+            return list(range(num_trials)), False
+        if value.startswith("[") and value.endswith("]"):
+            value = value[1:-1]
+        raw_indices = [part.strip() for part in value.split(",") if part.strip()]
+    elif isinstance(trial_indices_cfg, (list, tuple, ListConfig)):
+        raw_indices = list(trial_indices_cfg)
+    else:
+        raw_indices = [trial_indices_cfg]
+
+    trial_indices = [int(idx) for idx in raw_indices]
+    if len(trial_indices) == 0:
+        raise ValueError("EVALUATION.trial_indices was provided but no trial index was found.")
+    if len(set(trial_indices)) != len(trial_indices):
+        raise ValueError(f"EVALUATION.trial_indices contains duplicates: {trial_indices}")
+
+    out_of_range = [idx for idx in trial_indices if idx < 0 or idx >= num_trials]
+    if out_of_range:
+        raise ValueError(
+            f"EVALUATION.trial_indices must be within [0, {num_trials - 1}], "
+            f"got out-of-range values: {out_of_range}."
+        )
+    return trial_indices, True
+
+
+def _trial_indices_output_suffix(trial_indices: list[int], is_selected_rerun: bool) -> str:
+    if not is_selected_rerun:
+        return "_results.json"
+    if len(trial_indices) <= 8:
+        trial_tag = "-".join(str(idx) for idx in trial_indices)
+    else:
+        trial_tag = f"{trial_indices[0]}-{trial_indices[-1]}_n{len(trial_indices)}"
+    return f"_trials{trial_tag}_video_rerun.json"
+
+
+def _summarize_action_array(actions: list[list[float]]) -> dict[str, Any]:
+    if len(actions) == 0:
+        return {
+            "count": 0,
+            "min": None,
+            "max": None,
+            "mean": None,
+            "std": None,
+            "abs_max": None,
+            "near_limit_fraction": None,
+            "mean_abs_delta": None,
+            "gripper_value_counts": {},
+            "gripper_transitions": 0,
+        }
+
+    arr = np.asarray(actions, dtype=np.float32)
+    gripper = arr[:, -1]
+    rounded_gripper = np.round(gripper, decimals=3)
+    values, counts = np.unique(rounded_gripper, return_counts=True)
+    gripper_value_counts = {str(float(value)): int(count) for value, count in zip(values, counts)}
+    gripper_transitions = int(np.sum(np.abs(np.diff(np.sign(gripper))) > 0)) if len(gripper) > 1 else 0
+    mean_abs_delta = (
+        np.mean(np.abs(np.diff(arr, axis=0)), axis=0).tolist() if arr.shape[0] > 1 else [0.0] * arr.shape[1]
+    )
+
+    return {
+        "count": int(arr.shape[0]),
+        "min": arr.min(axis=0).tolist(),
+        "max": arr.max(axis=0).tolist(),
+        "mean": arr.mean(axis=0).tolist(),
+        "std": arr.std(axis=0).tolist(),
+        "abs_max": np.max(np.abs(arr), axis=0).tolist(),
+        "near_limit_fraction": {
+            "eef_pos_abs_ge_0_90": float(np.mean(np.abs(arr[:, :3]) >= 0.90)),
+            "rot_abs_ge_0_35": float(np.mean(np.abs(arr[:, 3:6]) >= 0.35)),
+        },
+        "mean_abs_delta": mean_abs_delta,
+        "gripper_value_counts": gripper_value_counts,
+        "gripper_transitions": gripper_transitions,
+    }
+
+
+def _make_action_trace(
+    *,
+    task_description: str,
+    episode_idx: int,
+    action_horizon: int,
+    max_steps: int,
+    num_steps_wait: int,
+    replan_steps: int,
+    use_action_ensembler: bool,
+    binarize_gripper: bool,
+    save_raw_action_trace: bool,
+) -> dict[str, Any]:
+    return {
+        "task_description": task_description,
+        "episode_idx": int(episode_idx),
+        "action_dimensions": ["dx", "dy", "dz", "droll", "dpitch", "dyaw", "gripper"],
+        "action_space_reference": {
+            "source": "release dataset stats after denormalization",
+            "eef_pos_approx_range": [-0.9375, 0.9375],
+            "rot_approx_range": {
+                "droll": [-0.242, 0.356],
+                "dpitch": [-0.375, 0.375],
+                "dyaw": [-0.364, 0.375],
+            },
+            "gripper_after_eval": "binarized/sign action sent to LIBERO env",
+        },
+        "config": {
+            "action_horizon": int(action_horizon),
+            "max_steps": int(max_steps),
+            "num_steps_wait": int(num_steps_wait),
+            "replan_steps": int(replan_steps),
+            "use_action_ensembler": bool(use_action_ensembler),
+            "binarize_gripper": bool(binarize_gripper),
+            "save_raw_action_trace": bool(save_raw_action_trace),
+        },
+        "dummy_wait_actions": [],
+        "replans": [],
+        "executed_policy_actions": [],
+        "summary": None,
+    }
+
+
+def _write_action_trace(
+    action_trace_dir: Path,
+    cfg: DictConfig,
+    episode_idx: int,
+    success: bool,
+    trace: dict[str, Any],
+) -> None:
+    action_trace_dir.mkdir(parents=True, exist_ok=True)
+    trace = dict(trace)
+    trace["success"] = bool(success)
+    trace["summary"] = _summarize_action_array(
+        [record["action"] for record in trace.get("executed_policy_actions", [])]
+    )
+    output_file = action_trace_dir / (
+        f"task{cfg.EVALUATION.task_id}_trial{episode_idx}_success{bool(success)}_action_trace.json"
+    )
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(trace, f, indent=2, cls=NumpyEncoder)
+
+
 def run_single_episode(
     env,
     initial_state,
@@ -455,13 +621,28 @@ def run_single_episode(
     input_w: int,
     input_h: int,
     model_device: str,
-) -> tuple[bool, list, list[dict[str, Any]], Optional[float]]:
+) -> tuple[bool, list, list[dict[str, Any]], Optional[float], Optional[dict[str, Any]]]:
     max_steps = _get_max_steps(cfg.EVALUATION.task_suite_name)
     replan_steps = int(cfg.EVALUATION.get("replan_steps", 5))
     num_steps_wait = int(cfg.EVALUATION.get("num_steps_wait", 5))
     use_action_ensembler = bool(cfg.EVALUATION.get("use_action_ensembler", False))
     visualize_future_video = bool(cfg.EVALUATION.get("visualize_future_video", False))
+    save_action_trace = bool(cfg.EVALUATION.get("save_action_trace", False))
+    save_raw_action_trace = bool(cfg.EVALUATION.get("save_raw_action_trace", save_action_trace))
     capture_steps = set(_get_future_frame_capture_steps(cfg)[1:])
+    action_trace = None
+    if save_action_trace:
+        action_trace = _make_action_trace(
+            task_description=task_description,
+            episode_idx=episode_idx,
+            action_horizon=action_horizon,
+            max_steps=max_steps,
+            num_steps_wait=num_steps_wait,
+            replan_steps=replan_steps,
+            use_action_ensembler=use_action_ensembler,
+            binarize_gripper=bool(cfg.EVALUATION.get("binarize_gripper", False)),
+            save_raw_action_trace=save_raw_action_trace,
+        )
 
     env.reset()
     obs = env.set_init_state(initial_state)
@@ -483,12 +664,15 @@ def run_single_episode(
     while t < max_steps + num_steps_wait:
         pbar.update(1)
         if t < num_steps_wait:
-            obs, _, done, _ = env.step(get_libero_dummy_action())
+            dummy_action = get_libero_dummy_action()
+            if action_trace is not None:
+                action_trace["dummy_wait_actions"].append({"env_t": int(t), "action": list(dummy_action)})
+            obs, _, done, _ = env.step(dummy_action)
             t += 1
             continue
 
         if len(pending_actions) == 0:
-            action_chunk, imgs, predicted_future_frames = _predict_action_chunk(
+            action_chunk, imgs, predicted_future_frames, action_stages = _predict_action_chunk(
                 obs=obs,
                 task_description=task_description,
                 model=model,
@@ -514,12 +698,46 @@ def run_single_episode(
                 pending_actions = [ensembler.get_action(ts).tolist() for ts in range(t, t + replan_steps)]
             else:
                 pending_actions = action_chunk[:replan_steps].tolist()
+            if action_trace is not None:
+                chunk_actions = action_chunk.tolist()
+                replan_record = {
+                    "replan_idx": int(len(action_trace["replans"])),
+                    "env_t": int(t),
+                    "chunk_shape": list(action_chunk.shape),
+                    "executed_count": int(len(pending_actions)),
+                    "chunk_summary": _summarize_action_array(chunk_actions),
+                    "chunk_actions": chunk_actions,
+                }
+                if save_raw_action_trace:
+                    replan_record["chunk_actions_by_stage"] = action_stages
+                    replan_record["chunk_stage_summaries"] = {
+                        stage_name: _summarize_action_array(stage_actions)
+                        for stage_name, stage_actions in action_stages.items()
+                    }
+                action_trace["replans"].append(replan_record)
             replay_images.append(imgs.copy())
         else:
             imgs = get_libero_image(obs)
             replay_images.append(imgs.copy())
 
-        obs, _, done, _ = env.step(pending_actions.pop(0))
+        action_idx_in_replan = int(replan_steps - len(pending_actions))
+        executed_action = pending_actions.pop(0)
+        if action_trace is not None:
+            executed_record = {
+                "env_t": int(t),
+                "replan_idx": int(len(action_trace["replans"]) - 1),
+                "action_idx_in_replan": action_idx_in_replan,
+                "action": list(executed_action),
+            }
+            if save_raw_action_trace and action_trace["replans"]:
+                raw_stages = action_trace["replans"][-1].get("chunk_actions_by_stage", {})
+                executed_record["action_by_stage"] = {
+                    stage_name: stage_actions[action_idx_in_replan]
+                    for stage_name, stage_actions in raw_stages.items()
+                    if action_idx_in_replan < len(stage_actions)
+                }
+            action_trace["executed_policy_actions"].append(executed_record)
+        obs, _, done, _ = env.step(executed_action)
         if visualize_future_video and current_predicted_future_clip is not None:
             current_replan_step += 1
             if current_replan_step in capture_steps:
@@ -578,7 +796,7 @@ def run_single_episode(
     episode_mean_psnr = (
         float(np.mean(episode_future_clip_psnr)) if len(episode_future_clip_psnr) > 0 else None
     )
-    return bool(done), replay_images, predicted_future_video_clips, episode_mean_psnr
+    return bool(done), replay_images, predicted_future_video_clips, episode_mean_psnr, action_trace
 
 
 def run_single_task(
@@ -589,7 +807,9 @@ def run_single_task(
     cfg: DictConfig,
     video_dir: Path,
     predicted_video_dir: Path,
+    action_trace_dir: Path,
     *,
+    trial_indices: list[int],
     action_horizon: int,
     input_w: int,
     input_h: int,
@@ -602,13 +822,15 @@ def run_single_task(
         "failure_episodes": [],
         "success_episodes": [],
         "task_description": task_description,
+        "evaluated_trials": trial_indices,
     }
     if visualize_future_video:
         results["episode_future_video_psnr"] = []
         results["future_video_psnr_mean"] = None
+    save_action_trace = bool(cfg.EVALUATION.get("save_action_trace", False))
 
-    for trial_idx in range(int(cfg.EVALUATION.num_trials)):
-        success, replay_images, predicted_future_video_clips, episode_mean_psnr = run_single_episode(
+    for trial_idx in trial_indices:
+        success, replay_images, predicted_future_video_clips, episode_mean_psnr, action_trace = run_single_episode(
             env=env,
             initial_state=initial_states[trial_idx],
             task_description=task_description,
@@ -629,13 +851,22 @@ def run_single_task(
         if visualize_future_video:
             results["episode_future_video_psnr"].append(episode_mean_psnr)
 
-        save_rollout_video(
-            video_dir,
-            replay_images,
-            f"task{cfg.EVALUATION.task_id}_trial{trial_idx}",
-            success=success,
-            task_description=task_description,
-        )
+        if bool(cfg.EVALUATION.get("save_rollout_video", True)):
+            save_rollout_video(
+                video_dir,
+                replay_images,
+                f"task{cfg.EVALUATION.task_id}_trial{trial_idx}",
+                success=success,
+                task_description=task_description,
+            )
+        if save_action_trace and action_trace is not None:
+            _write_action_trace(
+                action_trace_dir=action_trace_dir,
+                cfg=cfg,
+                episode_idx=trial_idx,
+                success=success,
+                trace=action_trace,
+            )
         if visualize_future_video:
             if len(predicted_future_video_clips) == 0:
                 logging.warning(
@@ -730,11 +961,15 @@ def eval_single_process(cfg: DictConfig):
     predicted_video_dir = local_log_dir / cfg.EVALUATION.task_suite_name / "predicted_videos"
     if bool(cfg.EVALUATION.get("visualize_future_video", False)):
         predicted_video_dir.mkdir(parents=True, exist_ok=True)
+    action_trace_dir = local_log_dir / cfg.EVALUATION.task_suite_name / "action_traces"
+    if bool(cfg.EVALUATION.get("save_action_trace", False)):
+        action_trace_dir.mkdir(parents=True, exist_ok=True)
 
     benchmark_dict = benchmark.get_benchmark_dict()
     task_suite = benchmark_dict[cfg.EVALUATION.task_suite_name]()
     task = task_suite.get_task(cfg.EVALUATION.task_id)
     initial_states = task_suite.get_task_init_states(cfg.EVALUATION.task_id)
+    trial_indices, is_selected_rerun = _resolve_trial_indices(cfg)
 
     while len(initial_states) < int(cfg.EVALUATION.num_trials):
         initial_states.extend(initial_states[: (int(cfg.EVALUATION.num_trials) - len(initial_states))])
@@ -744,7 +979,10 @@ def eval_single_process(cfg: DictConfig):
         "task_id": cfg.EVALUATION.task_id,
         "task_description": None,
         "successes": 0,
-        "total_episodes": int(cfg.EVALUATION.num_trials),
+        "total_episodes": len(trial_indices),
+        "configured_num_trials": int(cfg.EVALUATION.num_trials),
+        "selected_trial_rerun": is_selected_rerun,
+        "evaluated_trials": trial_indices,
         "gpu_id": int(cfg.gpu_id),
         "success_episodes": [],
         "failure_episodes": [],
@@ -761,6 +999,8 @@ def eval_single_process(cfg: DictConfig):
         cfg=cfg,
         video_dir=video_dir,
         predicted_video_dir=predicted_video_dir,
+        action_trace_dir=action_trace_dir,
+        trial_indices=trial_indices,
         action_horizon=action_horizon,
         input_w=input_w,
         input_h=input_h,
@@ -771,14 +1011,15 @@ def eval_single_process(cfg: DictConfig):
     results["duration"] = time.time() - start_time
     output_dir = Path(cfg.EVALUATION.output_dir) / cfg.EVALUATION.task_suite_name
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_file = output_dir / f"gpu{cfg.gpu_id}_task{cfg.EVALUATION.task_id}_results.json"
+    result_suffix = _trial_indices_output_suffix(trial_indices, is_selected_rerun)
+    output_file = output_dir / f"gpu{cfg.gpu_id}_task{cfg.EVALUATION.task_id}{result_suffix}"
 
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=4, cls=NumpyEncoder)
 
     print(
         f"Task {cfg.EVALUATION.task_id} completed: "
-        f"{results['successes']}/{cfg.EVALUATION.num_trials} successes"
+        f"{results['successes']}/{len(trial_indices)} successes"
     )
     if results.get("future_video_psnr_mean") is not None:
         print(f"Task {cfg.EVALUATION.task_id} future-video PSNR mean: {results['future_video_psnr_mean']:.4f}")

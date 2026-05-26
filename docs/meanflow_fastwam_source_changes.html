@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FastWAM One-Step / MeanFlow 源码改动汇总</title>
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --ink: #1f2933;
+      --muted: #5f6b7a;
+      --line: #d8dee7;
+      --accent: #1f6feb;
+      --ok: #1f7a4d;
+      --warn: #9a6700;
+      --bad: #b42318;
+      --code: #f1f4f8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+      line-height: 1.58;
+    }
+    header {
+      background: #17212f;
+      color: #fff;
+      padding: 34px 28px 28px;
+      border-bottom: 4px solid var(--accent);
+    }
+    header h1 {
+      margin: 0 0 10px;
+      font-size: 30px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+    header p {
+      margin: 6px 0 0;
+      max-width: 1120px;
+      color: #d8e2ee;
+    }
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px 18px 56px;
+    }
+    nav {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 18px;
+    }
+    nav a {
+      display: inline-block;
+      margin: 4px 14px 4px 0;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 18px 0;
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 22px;
+      line-height: 1.25;
+    }
+    h3 {
+      margin: 22px 0 8px;
+      font-size: 17px;
+    }
+    p { margin: 8px 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 6px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: #eef3f8;
+      color: #253241;
+      font-weight: 700;
+    }
+    tr:nth-child(even) td { background: #fbfcfe; }
+    ul { margin: 8px 0 12px 22px; padding: 0; }
+    li { margin: 4px 0; }
+    code {
+      background: var(--code);
+      border: 1px solid #dfe6ef;
+      border-radius: 4px;
+      padding: 1px 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 0.94em;
+    }
+    pre {
+      background: #111827;
+      color: #e5e7eb;
+      border-radius: 8px;
+      padding: 14px;
+      overflow: auto;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    pre code {
+      background: transparent;
+      border: 0;
+      color: inherit;
+      padding: 0;
+    }
+    .note {
+      border-left: 4px solid var(--accent);
+      background: #f2f7ff;
+      padding: 10px 12px;
+      margin: 12px 0;
+    }
+    .warn { border-left-color: var(--warn); background: #fff8e6; }
+    .bad { border-left-color: var(--bad); background: #fff2f0; }
+    .ok { border-left-color: var(--ok); background: #ecfdf3; }
+    .tag {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 9px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #e7f0ff;
+      color: #174ea6;
+      margin-right: 6px;
+    }
+    .tag.ok { background: #dff8ea; color: #12643c; border-left: 0; }
+    .tag.warn { background: #fff0c2; color: #7a4d00; border-left: 0; }
+    .tag.bad { background: #ffe2df; color: #9f1c12; border-left: 0; }
+    .path {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      word-break: break-all;
+    }
+    .small { color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>FastWAM One-Step / MeanFlow 源码改动汇总</h1>
+    <p>本页按方案整理当前工作树中为了 one-step、shortcut、MeanFlow 及其评测诊断对 FastWAM 代码做过的改动。重点是“改了哪些源码文件、每个改动服务于哪个方案、训练/推理/评测路径如何接上”。</p>
+    <p class="small">生成日期：2026-05-20。当前仓库处于 dirty worktree，本页反映的是本地代码状态，不是上游发布版本。</p>
+  </header>
+
+  <main>
+    <nav>
+      <a href="#matrix">方案总览</a>
+      <a href="#shared">公共改动</a>
+      <a href="#release">Release Baseline</a>
+      <a href="#one-step-action">One-Step Action</a>
+      <a href="#shortcut">Shortcut</a>
+      <a href="#meanflow-action">MeanFlow C/D</a>
+      <a href="#meanflow-joint">Joint MeanFlow</a>
+      <a href="#eval">评测诊断</a>
+      <a href="#file-index">文件索引</a>
+      <a href="#status">结论状态</a>
+    </nav>
+
+    <section id="matrix">
+      <h2>方案总览</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>方案</th>
+            <th>训练/推理目标</th>
+            <th>核心源码入口</th>
+            <th>主要配置</th>
+            <th>当前状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tag ok">baseline</span>Release 1/4/10-step</td>
+            <td>不改模型，只改变 action denoise steps，作为质量和速度参照。</td>
+            <td>原始 <code>FastWAM.infer_action</code>；新增评测脚本只包一层运行与统计。</td>
+            <td><code>configs/sim_libero.yaml</code> 新增 trace/video 控制项。</td>
+            <td>release_1 和 release_10 仍是最强参照。</td>
+          </tr>
+          <tr>
+            <td><span class="tag">A</span>One-step endpoint action</td>
+            <td>冻结 video expert，只微调 action 分支，在完整噪声端点直接回归 action velocity / endpoint。</td>
+            <td><code>src/fastwam/models/wan22/fastwam_one_step_action.py</code>；<code>create_fastwam_one_step_action</code>。</td>
+            <td><code>configs/model/fastwam_one_step_action.yaml</code>。</td>
+            <td>工程基线，主要为 shortcut / meanflow 继承。</td>
+          </tr>
+          <tr>
+            <td><span class="tag">B</span>Shortcut engineering baseline</td>
+            <td>给 action 分支增加 step-size conditioner，训练大步预测与两个半步预测一致。</td>
+            <td><code>fastwam_one_step_shortcut.py</code>；<code>create_fastwam_one_step_shortcut</code>。</td>
+            <td><code>configs/model/fastwam_one_step_shortcut.yaml</code>。</td>
+            <td>LIBERO 2k 结果接近 release_1，是当前 one-step 中最稳的路线。</td>
+          </tr>
+          <tr>
+            <td><span class="tag warn">B2</span>Official-style shortcut</td>
+            <td>更接近 shortcut 论文：随机 flow sample + bootstrap sample，dt 用 log2 bucket conditioning。</td>
+            <td><code>fastwam_one_step_shortcut_official.py</code>；<code>create_fastwam_one_step_shortcut_official</code>。</td>
+            <td><code>configs/model/fastwam_one_step_shortcut_official.yaml</code>。</td>
+            <td>2k pilot 低于旧 shortcut 和 release_1。</td>
+          </tr>
+          <tr>
+            <td><span class="tag bad">C</span>MeanFlow action-only</td>
+            <td>冻结 video expert，在 action 分支学习区间平均速度；支持 finite-difference 与 paper-JVP。</td>
+            <td><code>fastwam_one_step_meanflow.py</code>；<code>create_fastwam_one_step_meanflow</code>。</td>
+            <td><code>configs/model/fastwam_one_step_meanflow.yaml</code>；LIBERO C/D0/D1 task configs。</td>
+            <td>速度收益存在，但 rollout 质量明显失败；eff6k 只在 gap-probe 达到 3/7，LIBERO-10 仍 0/4。</td>
+          </tr>
+          <tr>
+            <td><span class="tag bad">E</span>Joint finite-difference MeanFlow</td>
+            <td>保持 FastWAMJoint video/action topology，同时对 video/action 训练 MeanFlow 平均速度。</td>
+            <td><code>fastwam_joint_meanflow.py</code>；<code>create_fastwam_joint_meanflow</code>。</td>
+            <td><code>configs/model/fastwam_joint_meanflow.yaml</code>。</td>
+            <td>2k checkpoint 评测 0/7，未解决 action-only MeanFlow 的失败。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="shared">
+      <h2>公共源码改动</h2>
+      <p>这些改动不是某个单一方案的 loss，而是为了让 one-step/shortcut/MeanFlow 这些子类能在同一个 FastWAM 训练框架里挂载新模块、控制可训练参数、跑 bf16/JVP、保存或跳过训练状态。</p>
+
+      <h3>模型训练钩子</h3>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>改动</th><th>服务对象</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="path">src/fastwam/models/wan22/fastwam.py</td>
+            <td>给基类新增 <code>configure_trainable_parameters()</code> 空钩子，子类可覆盖，用来冻结 video expert、打开 conditioner、关闭 proprio encoder 等。</td>
+            <td>one-step action、shortcut、MeanFlow、joint MeanFlow。</td>
+          </tr>
+          <tr>
+            <td class="path">src/fastwam/trainer.py</td>
+            <td>optimizer 收集参数时额外读取模型的 <code>extra_trainable_parameters()</code>，并按参数 id 去重。</td>
+            <td>动态挂到 <code>action_expert</code> / <code>video_expert</code> 上的 conditioner 模块。</td>
+          </tr>
+          <tr>
+            <td class="path">src/fastwam/trainer.py</td>
+            <td>新增 <code>save_training_state</code> 配置项；保存 checkpoint 时可以只保存 weight checkpoint，跳过 DeepSpeed/Accelerate full state。</td>
+            <td>2k pilot 减少磁盘写入；joint pilot 可选择保留 full state 以便续训。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>dtype / JVP 兼容</h3>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>改动</th><th>原因</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="path">src/fastwam/models/wan22/action_dit.py</td>
+            <td><code>pre_dit</code> 内把 <code>action_tokens</code>、<code>timestep</code>、<code>context</code> 转到对应 embedding weight 的 device/dtype。</td>
+            <td>修复 bf16 / fp32 混用时 Linear 输入 dtype 不一致，尤其是 JVP 和 meanflow smoke。</td>
+          </tr>
+          <tr>
+            <td class="path">src/fastwam/models/wan22/wan_video_dit.py</td>
+            <td><code>pre_dit</code> 内把 video latent、timestep、context、可选 action 条件转到各自 embedding 的 device/dtype。</td>
+            <td>joint MeanFlow smoke 中 video 分支 bf16 dtype path 必需。</td>
+          </tr>
+          <tr>
+            <td class="path">src/fastwam/models/wan22/wan_video_dit.py</td>
+            <td>新增 <code>force_manual_attention()</code>、<code>is_manual_attention_forced()</code>、<code>_manual_scaled_dot_product_attention()</code>，并让 <code>flash_attention()</code> 可绕开 PyTorch SDPA。</td>
+            <td>paper-JVP 路径里 forward-mode AD 不能稳定穿过 flash SDPA，JVP loss 需要 manual attention fallback。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>数据和训练脚本</h3>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>改动</th><th>目的</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="path">configs/data/libero_2cam.yaml</td>
+            <td>添加 <code>pretrained_norm_stats: ./checkpoints/fastwam_release/libero_uncond_2cam224_dataset_stats.json</code>。</td>
+            <td>所有 LIBERO 2cam fine-tune 和 eval 复用 release 归一化坐标，避免 normalization 漂移。</td>
+          </tr>
+          <tr>
+            <td class="path">configs/train.yaml</td>
+            <td>添加全局默认 <code>save_training_state: true</code>。</td>
+            <td>保留可续训能力；pilot task 可覆盖为 false。</td>
+          </tr>
+          <tr>
+            <td class="path">scripts/train_zero1.sh / scripts/train_zero2.sh</td>
+            <td>给 <code>accelerate launch</code> 补齐 <code>--num_machines</code>、<code>--machine_rank</code>、<code>--main_process_ip</code>、<code>--main_process_port</code>。</td>
+            <td>让 ZeRO-1/ZeRO-2 脚本可稳定接受多机/端口环境变量。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="release">
+      <h2>Release Baseline / Step Curve</h2>
+      <p><span class="tag ok">源码结论</span>Release 方案没有改 FastWAM 模型源码；它只通过 evaluation override 控制 <code>num_inference_steps</code>，用于对比 release_1、release_4、release_10。</p>
+      <table>
+        <thead>
+          <tr><th>支撑文件</th><th>作用</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="path">experiments/libero/benchmark_release_inference_latency.py</td>
+            <td>加载同一个 release checkpoint，对不同 denoise steps 做合成输入 latency benchmark；可分开统计 end-to-end 和 denoise-loop 时间。</td>
+          </tr>
+          <tr>
+            <td class="path">experiments/libero/run_release_step_curve_chain.sh</td>
+            <td>串联 release step curve 的多组评测任务。</td>
+          </tr>
+          <tr>
+            <td class="path">experiments/libero/run_release10_multiworker.sh</td>
+            <td>封装 release_10 多 worker 评测。</td>
+          </tr>
+          <tr>
+            <td class="path">configs/sim_libero.yaml</td>
+            <td>新增 <code>save_rollout_video</code>、<code>save_action_trace</code>、<code>trial_indices</code>，让 baseline 与 MeanFlow 用同一 eval 路径输出 trace。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="one-step-action">
+      <h2>One-Step Action Endpoint Fine-Tune</h2>
+      <p>这是后续 shortcut 和 action-only MeanFlow 的基础子类：保留 FastWAM 的当前帧 video prefill 和 MoT action path，但训练时只用首帧 video token，直接在 action 端点学习。</p>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>具体改动</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="path">src/fastwam/models/wan22/fastwam_one_step_action.py</td>
+            <td>
+              新增 <code>FastWAMOneStepAction</code>：
+              <ul>
+                <li><code>from_wan22_pretrained()</code> 接收 <code>one_step_action_timestep</code>、<code>loss_lambda_action_velocity</code>、<code>loss_lambda_action_endpoint</code>、<code>freeze_video_expert</code>。</li>
+                <li><code>configure_trainable_parameters()</code> 默认冻结 <code>video_expert</code>。</li>
+                <li><code>_build_one_step_action_timestep()</code> 默认使用 action scheduler 最大 timestep，即 sigma=1 端点。</li>
+                <li><code>_masked_action_mse()</code> 对 padded action token 做 mask 后求 MSE。</li>
+                <li><code>training_loss()</code> 从 clean action 加噪到端点，预测 action velocity，并额外用 <code>a_hat = noisy - sigma * pred_velocity</code> 计算 endpoint loss。</li>
+              </ul>
+            </td>
+          </tr>
+          <tr>
+            <td class="path">src/fastwam/runtime.py</td>
+            <td>已有 <code>create_fastwam_one_step_action()</code> 工厂：解析 model/action scheduler/loss/one_step_action 配置，实例化 <code>FastWAMOneStepAction</code>。</td>
+          </tr>
+          <tr>
+            <td class="path">configs/model/fastwam_one_step_action.yaml</td>
+            <td>新增模型配置，复用 Wan2.2-TI2V-5B video/action DiT 结构，设置 <code>one_step_action.timestep=null</code> 和 action loss 权重 0.5/0.5。</td>
+          </tr>
+          <tr>
+            <td class="path">configs/task/robotwin_one_step_action_3cam_384_1e-4.yaml</td>
+            <td>RoboTwin smoke task，10 steps，release checkpoint resume。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="shortcut">
+      <h2>Shortcut 系列</h2>
+      <h3>B：工程版 Shortcut</h3>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>具体改动</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="path">src/fastwam/models/wan22/fastwam_one_step_shortcut.py</td>
+            <td>
+              新增/更新 <code>FastWAMOneStepShortcut</code>：
+              <ul>
+                <li>继承 <code>FastWAMOneStepAction</code>，给 action expert 动态挂载 <code>shortcut_step_embedding</code> 和 <code>shortcut_step_projection</code>。</li>
+                <li>step-size conditioner 使用 sinusoidal embedding，把 <code>shortcut_step_size</code> 注入 action <code>t_mod</code>。</li>
+                <li>训练时同一个 noisy action 同时预测大步 velocity、两个半步 velocity；loss 包括 action velocity、endpoint、shortcut consistency、half velocity。</li>
+                <li>覆盖 <code>_predict_action_noise_with_cache()</code>，推理时在 action cache path 里也注入 shortcut step-size conditioner。</li>
+                <li>当前工作树新增 <code>configure_trainable_parameters()</code> 与 <code>extra_trainable_parameters()</code>，确保动态 conditioner 进入 optimizer。</li>
+              </ul>
+            </td>
+          </tr>
+          <tr>
+            <td class="path">src/fastwam/runtime.py</td>
+            <td><code>create_fastwam_one_step_shortcut()</code> 解析 <code>one_step_shortcut.start_timestep</code>、<code>step_size</code> 和 shortcut loss 权重。</td>
+          </tr>
+          <tr>
+            <td class="path">configs/model/fastwam_one_step_shortcut.yaml</td>
+            <td>模型配置：<code>step_size=1.0</code>，默认冻结 video expert，四项 loss 权重各 0.25。</td>
+          </tr>
+          <tr>
+            <td class="path">configs/task/libero_one_step_shortcut_2cam224_1e-4.yaml</td>
+            <td>LIBERO 2cam 2k pilot task，release checkpoint resume，<code>save_training_state=false</code>。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>B2：Official-style Shortcut</h3>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>具体改动</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="path">src/fastwam/models/wan22/fastwam_one_step_shortcut_official.py</td>
+            <td>
+              新增 <code>FastWAMOneStepShortcutOfficial</code>：
+              <ul>
+                <li>仍继承工程版 shortcut，但 step-size conditioner 改成 <code>shortcut_dt_base=-log2(step_size)</code> bucket。</li>
+                <li><code>shortcut_num_denoise_steps</code> 必须是大于 1 的 2 的幂，默认 128。</li>
+                <li><code>_sample_flow_shortcut_batch()</code> 随机 section，直接监督完整 flow target。</li>
+                <li><code>_sample_bootstrap_shortcut_batch()</code> 随机较粗 dt，用两个 half-step teacher 产生 bootstrap target。</li>
+                <li><code>training_loss()</code> 按 <code>bootstrap_ratio</code> 在 flow target 和 bootstrap target 间采样，只优化 <code>loss_shortcut_target</code>。</li>
+              </ul>
+            </td>
+          </tr>
+          <tr>
+            <td class="path">src/fastwam/runtime.py</td>
+            <td>新增 <code>create_fastwam_one_step_shortcut_official()</code>，解析 <code>one_step_shortcut_official.num_denoise_steps</code>、<code>bootstrap_ratio</code> 和 <code>lambda_shortcut_target</code>。</td>
+          </tr>
+          <tr>
+            <td class="path">configs/model/fastwam_one_step_shortcut_official.yaml</td>
+            <td>新增 official-style shortcut 模型配置，默认 <code>num_denoise_steps=128</code>、<code>bootstrap_ratio=0.75</code>、<code>lambda_shortcut_target=1.0</code>。</td>
+          </tr>
+          <tr>
+            <td class="path">configs/task/libero_one_step_shortcut_official_2cam224_1e-4.yaml</td>
+            <td>LIBERO 2cam 2k pilot task。</td>
+          </tr>
+          <tr>
+            <td class="path">experiments/libero/run_shortcut_official_pilot_chain.sh</td>
+            <td>训练 official-style shortcut 2k，并启动对应 LIBERO eval。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="meanflow-action">
+      <h2>MeanFlow C / D0 / D1：Action-only 路线</h2>
+      <p>这一组把 MeanFlow 接到 FastWAM 的 action 分支上。video expert 默认冻结，只编码首帧，action expert 学习区间平均速度 <code>u_theta(z_t, r, t)</code>。C/D0/D1 的区别主要是可训练参数范围。</p>
+
+      <h3>核心模型类</h3>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>具体改动</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="path">src/fastwam/models/wan22/fastwam_one_step_meanflow.py</td>
+            <td>
+              新增 <code>FastWAMOneStepMeanFlow</code>：
+              <ul>
+                <li>继承 <code>FastWAMOneStepAction</code>，保留 action-only fine-tune 和 video freeze 逻辑。</li>
+                <li>动态给 action expert 挂载 <code>meanflow_start_embedding</code> / <code>meanflow_start_projection</code>，把区间起点 <code>r</code> 注入 action <code>t_mod</code>。</li>
+                <li>支持 <code>meanflow_trainable_scope</code>：<code>action</code>、<code>conditioner</code>、<code>conditioner_head</code>。</li>
+                <li>支持 <code>meanflow_train_proprio_encoder</code>，D0/D1 可关闭 proprio encoder 训练。</li>
+                <li><code>_sample_meanflow_sigma_pair()</code> 支持固定端点或随机 <code>r,t</code>，支持 <code>equal_time_prob</code>。</li>
+                <li>覆盖 <code>_predict_action_noise_with_cache()</code>，推理时用 <code>r=start_timestep</code> 的 conditioner 路径预测 action velocity。</li>
+              </ul>
+            </td>
+          </tr>
+          <tr>
+            <td class="path">src/fastwam/models/wan22/fastwam_one_step_meanflow.py</td>
+            <td>
+              <strong>paper-JVP objective</strong>：
+              <ul>
+                <li><code>_training_loss_paper_jvp()</code> 构造 <code>z_t=(1-t)a+t epsilon</code> 和 <code>v=epsilon-a</code>。</li>
+                <li>用 <code>torch.func.jvp</code> 计算 <code>u</code> 和方向导数 <code>du/dt</code>。</li>
+                <li>训练目标为 <code>u_target = v - (t-r) * du/dt</code>，对 target stop-gradient。</li>
+                <li>JVP 内临时关闭 gradient checkpointing，并通过 <code>force_manual_attention(True)</code> 避开 flash SDPA。</li>
+              </ul>
+            </td>
+          </tr>
+          <tr>
+            <td class="path">src/fastwam/models/wan22/fastwam_one_step_meanflow.py</td>
+            <td>
+              <strong>finite-difference objective</strong>：
+              <ul>
+                <li><code>_training_loss_finite_difference()</code> 随机采样 <code>r&lt;t</code>，强制最小间隔为 <code>derivative_epsilon</code>。</li>
+                <li>先 forward 得到 <code>u_t</code>，再构造 <code>z_{t-eps}=z_t-eps*v</code>，no-grad forward 得到 <code>u_prev</code>。</li>
+                <li>用 <code>(u_t.detach()-u_prev)/eps</code> 近似 <code>du/dt</code>，再形成 MeanFlow target。</li>
+                <li>loss 可组合 <code>lambda_meanflow_target</code>、<code>lambda_action_velocity</code>、<code>lambda_action_endpoint</code>；当前配置只开 target loss。</li>
+              </ul>
+            </td>
+          </tr>
+          <tr>
+            <td class="path">src/fastwam/runtime.py</td>
+            <td>新增 <code>create_fastwam_one_step_meanflow()</code>，解析 objective、随机 <code>r,t</code>、equal-time 概率、可训练 scope、proprio 训练开关、loss 权重和 derivative epsilon。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>配置拆分</h3>
+      <table>
+        <thead>
+          <tr><th>配置</th><th>区别</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="path">configs/model/fastwam_one_step_meanflow.yaml</td>
+            <td>模型默认：<code>objective=finite_difference</code>、<code>random_timesteps=true</code>、<code>equal_time_prob=0.0</code>、<code>trainable_scope=action</code>、<code>derivative_epsilon=0.05</code>、<code>lambda_meanflow_target=1.0</code>。</td>
+          </tr>
+          <tr>
+            <td class="path">configs/task/libero_one_step_meanflow_2cam224_1e-4.yaml</td>
+            <td>C-action-only：训练 action expert + MeanFlow conditioner + proprio encoder，video expert frozen，resume release checkpoint。</td>
+          </tr>
+          <tr>
+            <td class="path">configs/task/libero_one_step_meanflow_d0_conditioner_2cam224_1e-4.yaml</td>
+            <td>D0：只训练 MeanFlow start conditioner，冻结 action expert 与 proprio encoder。</td>
+          </tr>
+          <tr>
+            <td class="path">configs/task/libero_one_step_meanflow_d1_conditioner_head_2cam224_1e-4.yaml</td>
+            <td>D1：训练 MeanFlow start conditioner + action head，冻结 action backbone 与 proprio encoder。</td>
+          </tr>
+          <tr>
+            <td class="path">configs/task/robotwin_one_step_meanflow_3cam_384_1e-4.yaml</td>
+            <td>RoboTwin smoke config，默认 10 steps，release RoboTwin checkpoint resume。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note bad">
+        当前实验结论：C-action-only finite-difference 有速度收益，但 rollout 质量差；paper-JVP FP32 2k gap-probe 为 0/7；D0/D1 是诊断配置，不是已证明有效的最终方案。
+      </div>
+    </section>
+
+    <section id="meanflow-joint">
+      <h2>Joint Finite-Difference MeanFlow</h2>
+      <p>该方案试图保持 FastWAMJoint 的 video/action 耦合结构，同时把 video 和 action 都改成 finite-difference MeanFlow 目标，用来验证 action-only MeanFlow 是否因为破坏 joint topology 而失败。</p>
+
+      <table>
+        <thead>
+          <tr><th>文件</th><th>具体改动</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="path">src/fastwam/models/wan22/fastwam_joint_meanflow.py</td>
+            <td>
+              新增 <code>FastWAMJointMeanFlow</code>：
+              <ul>
+                <li>继承 <code>FastWAMJoint</code>，同时处理 noisy video latent 和 noisy action。</li>
+                <li>给 video expert 和 action expert 分别安装 <code>meanflow_start_embedding/projection</code>，对两个分支都注入区间起点 <code>r</code>。</li>
+                <li><code>_sample_meanflow_sigma_pair()</code> 对 video/action 共用随机 <code>r,t</code>。</li>
+                <li><code>_predict_joint_mean_velocity()</code> 保持 MoT mixed attention，同时输出 video/action 平均速度。</li>
+                <li>覆盖 <code>_predict_joint_noise()</code> 和 <code>infer_action()</code>，推理时也带 MeanFlow start conditioning。</li>
+                <li><code>configure_trainable_parameters()</code> 支持 <code>joint</code> 或 <code>conditioner</code> scope。</li>
+              </ul>
+            </td>
+          </tr>
+          <tr>
+            <td class="path">src/fastwam/models/wan22/fastwam_joint_meanflow.py</td>
+            <td>
+              <strong>training loss</strong>：
+              <ul>
+                <li>对 video/action 分别采样噪声并加到 <code>sigma_end</code>。</li>
+                <li>保留 first-frame causal 约束：若有 <code>first_frame_latents</code>，noisy video 和 prev video 的第 0 帧强制替换为真实首帧。</li>
+                <li>用一次当前 forward 和一次 no-grad prev forward 近似 video/action 的 <code>du/dt</code>。</li>
+                <li>video loss 使用原有 video mask 计算，action loss 使用 masked action MSE。</li>
+                <li>额外记录 <code>loss_video_endpoint_sanity</code> 和 <code>loss_action_endpoint_sanity</code>，但不作为主 loss。</li>
+              </ul>
+            </td>
+          </tr>
+          <tr>
+            <td class="path">src/fastwam/runtime.py</td>
+            <td>新增 <code>create_fastwam_joint_meanflow()</code>，解析 <code>joint_meanflow</code> 配置、video/action MeanFlow loss 权重和可训练 scope。</td>
+          </tr>
+          <tr>
+            <td class="path">configs/model/fastwam_joint_meanflow.yaml</td>
+            <td>模型配置：<code>trainable_scope=joint</code>，video/action MeanFlow loss 权重均为 1。</td>
+          </tr>
+          <tr>
+            <td class="path">configs/task/libero_joint_meanflow_fd_2cam224_1e-4.yaml</td>
+            <td>LIBERO joint finite-difference pilot，2k steps，<code>save_every=500</code>，<code>save_training_state=true</code>，resume release checkpoint。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note bad">
+        当前结果：joint finite-difference 2k 权重 checkpoint 已保存，但 full state 保存因磁盘空间不足报错；用 step_002000.pt 评测 gap-probe 为 0/7。
+      </div>
+    </section>
+
+    <section id="eval">
+      <h2>评测、Trace 和诊断支撑改动</h2>
+      <p>这些改动不改变模型数学目标，但它们是判断 MeanFlow 失败原因的关键：保存每个 action stage、限定 trial0 复现、做 gripper/motion hybrid replay，以及把多 worker 评测脚本改成可恢复。</p>
+
+      <h3>LIBERO 单任务评测</h3>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>具体改动</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="path">experiments/libero/eval_libero_single.py</td>
+            <td>
+              <ul>
+                <li>新增 <code>trial_indices</code> 解析，可只重跑指定 initial state，例如 trial0。</li>
+                <li>新增 <code>save_rollout_video</code>，可关闭 rollout mp4 以节省时间/空间。</li>
+                <li>新增 <code>save_action_trace</code> / <code>save_raw_action_trace</code>。</li>
+                <li>保存 action stages：<code>model_normalized</code>、<code>denormalized_dataset</code>、<code>gripper_scaled_before_invert</code>、<code>libero_continuous_before_sign</code>、<code>env_action</code>。</li>
+                <li>保存 dummy wait actions、每次 replan 的 chunk、每个已执行 action、chunk summary、gripper transition 统计。</li>
+                <li>selected-trial rerun 输出文件名从 <code>_results.json</code> 改为 <code>_trials..._video_rerun.json</code>，避免覆盖 full eval。</li>
+              </ul>
+            </td>
+          </tr>
+          <tr>
+            <td class="path">configs/sim_libero.yaml</td>
+            <td>添加 <code>EVALUATION.save_rollout_video</code>、<code>save_action_trace</code>、<code>trial_indices</code> 默认项。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>多 worker 评测与汇总</h3>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>具体改动</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="path">experiments/libero/run_libero_manager.py</td>
+            <td>如果提供 <code>MULTIRUN.task_file</code>，不再覆盖生成；检查文件存在且非空。</td>
+          </tr>
+          <tr>
+            <td class="path">experiments/libero/run_libero_parallel_test.sh</td>
+            <td>支持自定义 <code>SESSION_NAME</code>、<code>PYTHON_BIN</code> 和多种环境变量；result pattern 改成 <code>gpu*_task*.json</code>，兼容 selected-trial rerun；已有结果可跳过并恢复。</td>
+          </tr>
+          <tr>
+            <td class="path">experiments/libero/summarize_results.py</td>
+            <td>用正则同时识别 full eval 和 selected-trial rerun 的结果文件；overall success 改成按总 trials 加权，同时保留 average suite success。</td>
+          </tr>
+          <tr>
+            <td class="path">experiments/libero/run_libero_task_set_eval.sh</td>
+            <td>新增通用 task-set eval wrapper，可传 task file、trial indices、save trace、save video、workers per GPU。</td>
+          </tr>
+          <tr>
+            <td class="path">experiments/libero/run_libero_multiworker_batch.sh</td>
+            <td>通用多 worker eval 封装，被 shortcut/meanflow/release 链路复用。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>MeanFlow 诊断脚本</h3>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>作用</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="path">experiments/libero/visualize_meanflow_training.py</td>
+            <td>解析 trainer Rich log，输出 training metrics CSV/JSON 和 standalone HTML dashboard，跟踪 MeanFlow loss、sigma interval、速度、checkpoint。</td>
+          </tr>
+          <tr>
+            <td class="path">experiments/libero/summarize_action_traces.py</td>
+            <td>读取 action trace，输出 first close step、close ratio、gripper segments、transition count、max pos/rot、near-limit fraction。</td>
+          </tr>
+          <tr>
+            <td class="path">experiments/libero/replay_hybrid_action_traces.py</td>
+            <td>重放 release / MeanFlow trace，并支持 motion 与 gripper 互换：MeanFlow motion + release gripper、release motion + MeanFlow gripper、smoothed MeanFlow gripper。</td>
+          </tr>
+          <tr>
+            <td class="path">experiments/libero/render_libero_trials.sh</td>
+            <td>针对指定 task/trial 渲染 rollout 视频，用于对照失败场景。</td>
+          </tr>
+          <tr>
+            <td class="path">experiments/libero/drain_and_resume_multiworker.sh</td>
+            <td>辅助清空/恢复多 worker 评测队列。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>RoboTwin quick compare</h3>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>改动</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="path">experiments/robotwin/run_robotwin_quick_compare.py</td>
+            <td>新增 <code>meanflow_1</code> group，读取 <code>MEANFLOW_CKPT</code> 和 <code>MEANFLOW_TASK</code>，默认 task 为 <code>robotwin_one_step_meanflow_3cam_384_1e-4</code>。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="file-index">
+      <h2>文件级改动索引</h2>
+      <p>下面按文件列出当前本地工作树中与这些方案直接相关的源码、配置、脚本和文档。标记为“新增”的文件在当前 git status 中是 untracked。</p>
+
+      <h3>模型源码</h3>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>状态</th><th>覆盖方案</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="path">src/fastwam/models/wan22/fastwam_one_step_action.py</td><td>已有</td><td>one-step endpoint action 基类。</td></tr>
+          <tr><td class="path">src/fastwam/models/wan22/fastwam_one_step_shortcut.py</td><td>修改</td><td>shortcut 工程版；新增 optimizer 可见的 conditioner 参数钩子。</td></tr>
+          <tr><td class="path">src/fastwam/models/wan22/fastwam_one_step_shortcut_official.py</td><td>新增</td><td>official-style shortcut。</td></tr>
+          <tr><td class="path">src/fastwam/models/wan22/fastwam_one_step_meanflow.py</td><td>新增</td><td>action-only MeanFlow，含 finite_difference / paper_jvp / C-D0-D1 scopes。</td></tr>
+          <tr><td class="path">src/fastwam/models/wan22/fastwam_joint_meanflow.py</td><td>新增</td><td>joint video/action finite-difference MeanFlow。</td></tr>
+          <tr><td class="path">src/fastwam/models/wan22/action_dit.py</td><td>修改</td><td>dtype/device 兼容。</td></tr>
+          <tr><td class="path">src/fastwam/models/wan22/wan_video_dit.py</td><td>修改</td><td>manual attention fallback；dtype/device 兼容。</td></tr>
+          <tr><td class="path">src/fastwam/models/wan22/fastwam.py</td><td>修改</td><td>基类 trainable hook。</td></tr>
+          <tr><td class="path">src/fastwam/runtime.py</td><td>修改</td><td>新增 official shortcut、one-step MeanFlow、joint MeanFlow 工厂。</td></tr>
+          <tr><td class="path">src/fastwam/trainer.py</td><td>修改</td><td>extra trainable params；可选 full training state 保存。</td></tr>
+        </tbody>
+      </table>
+
+      <h3>模型与任务配置</h3>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>状态</th><th>覆盖方案</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="path">configs/model/fastwam_one_step_action.yaml</td><td>已有</td><td>one-step endpoint action。</td></tr>
+          <tr><td class="path">configs/model/fastwam_one_step_shortcut.yaml</td><td>已有</td><td>shortcut 工程版。</td></tr>
+          <tr><td class="path">configs/model/fastwam_one_step_shortcut_official.yaml</td><td>新增</td><td>official-style shortcut。</td></tr>
+          <tr><td class="path">configs/model/fastwam_one_step_meanflow.yaml</td><td>新增</td><td>action-only MeanFlow。</td></tr>
+          <tr><td class="path">configs/model/fastwam_joint_meanflow.yaml</td><td>新增</td><td>joint MeanFlow。</td></tr>
+          <tr><td class="path">configs/task/libero_one_step_shortcut_2cam224_1e-4.yaml</td><td>新增</td><td>LIBERO shortcut 2k pilot。</td></tr>
+          <tr><td class="path">configs/task/libero_one_step_shortcut_official_2cam224_1e-4.yaml</td><td>新增</td><td>LIBERO official shortcut 2k pilot。</td></tr>
+          <tr><td class="path">configs/task/libero_one_step_meanflow_2cam224_1e-4.yaml</td><td>新增</td><td>C-action-only MeanFlow。</td></tr>
+          <tr><td class="path">configs/task/libero_one_step_meanflow_d0_conditioner_2cam224_1e-4.yaml</td><td>新增</td><td>D0 conditioner-only MeanFlow。</td></tr>
+          <tr><td class="path">configs/task/libero_one_step_meanflow_d1_conditioner_head_2cam224_1e-4.yaml</td><td>新增</td><td>D1 conditioner + head MeanFlow。</td></tr>
+          <tr><td class="path">configs/task/libero_joint_meanflow_fd_2cam224_1e-4.yaml</td><td>新增</td><td>joint finite-difference MeanFlow。</td></tr>
+          <tr><td class="path">configs/task/robotwin_one_step_meanflow_3cam_384_1e-4.yaml</td><td>新增</td><td>RoboTwin MeanFlow smoke。</td></tr>
+          <tr><td class="path">configs/data/libero_2cam.yaml</td><td>修改</td><td>release dataset stats 对齐。</td></tr>
+          <tr><td class="path">configs/sim_libero.yaml</td><td>修改</td><td>trace/video/trial eval knobs。</td></tr>
+          <tr><td class="path">configs/train.yaml</td><td>修改</td><td><code>save_training_state</code> 默认项。</td></tr>
+        </tbody>
+      </table>
+
+      <h3>实验脚本与诊断工具</h3>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>状态</th><th>用途</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="path">experiments/libero/eval_libero_single.py</td><td>修改</td><td>trace、trial rerun、视频开关。</td></tr>
+          <tr><td class="path">experiments/libero/run_libero_manager.py</td><td>修改</td><td>已有 task file 校验和复用。</td></tr>
+          <tr><td class="path">experiments/libero/run_libero_parallel_test.sh</td><td>修改</td><td>多 worker 恢复、结果 pattern 兼容。</td></tr>
+          <tr><td class="path">experiments/libero/summarize_results.py</td><td>修改</td><td>selected-trial result 汇总和 total-trial overall。</td></tr>
+          <tr><td class="path">experiments/libero/benchmark_release_inference_latency.py</td><td>新增</td><td>release/meanflow latency benchmark。</td></tr>
+          <tr><td class="path">experiments/libero/visualize_meanflow_training.py</td><td>新增</td><td>MeanFlow 训练 log HTML dashboard。</td></tr>
+          <tr><td class="path">experiments/libero/summarize_action_traces.py</td><td>新增</td><td>action trace 统计。</td></tr>
+          <tr><td class="path">experiments/libero/replay_hybrid_action_traces.py</td><td>新增</td><td>motion/gripper hybrid replay。</td></tr>
+          <tr><td class="path">experiments/libero/run_libero_task_set_eval.sh</td><td>新增</td><td>通用 task-set eval wrapper。</td></tr>
+          <tr><td class="path">experiments/libero/render_libero_trials.sh</td><td>新增</td><td>指定 trial rollout 视频渲染。</td></tr>
+          <tr><td class="path">experiments/libero/run_one_step_pilot_eval_chain.sh</td><td>新增</td><td>shortcut/meanflow pilot eval chain。</td></tr>
+          <tr><td class="path">experiments/libero/run_shortcut_official_pilot_chain.sh</td><td>新增</td><td>official shortcut train + eval chain。</td></tr>
+          <tr><td class="path">experiments/libero/run_release_step_curve_chain.sh</td><td>新增</td><td>release step curve eval chain。</td></tr>
+          <tr><td class="path">experiments/libero/run_release10_multiworker.sh</td><td>新增</td><td>release_10 multiworker eval helper。</td></tr>
+          <tr><td class="path">experiments/libero/drain_and_resume_multiworker.sh</td><td>新增</td><td>多 worker 评测恢复辅助。</td></tr>
+          <tr><td class="path">experiments/robotwin/run_robotwin_quick_compare.py</td><td>修改</td><td>加入 meanflow_1 对比组。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="status">
+      <h2>源码改动对应的实验结论</h2>
+      <table>
+        <thead>
+          <tr><th>方案</th><th>源码层面是否完整</th><th>实验结论</th><th>下一步建议</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Release baseline</td>
+            <td>完整；无模型源码改动。</td>
+            <td>release_1/10 仍是高成功率参照。</td>
+            <td>继续作为所有 one-step 方案的评估锚点。</td>
+          </tr>
+          <tr>
+            <td>Shortcut 工程版</td>
+            <td>完整。</td>
+            <td>2k pilot 接近 release_1，明显优于当前 MeanFlow。</td>
+            <td>作为实用 one-step 备选继续优化。</td>
+          </tr>
+          <tr>
+            <td>Official-style shortcut</td>
+            <td>完整。</td>
+            <td>2k pilot 低于 release_1 和旧 shortcut。</td>
+            <td>不宜直接推广，可作为论文式 shortcut 对照。</td>
+          </tr>
+          <tr>
+            <td>MeanFlow action-only finite-difference</td>
+            <td>完整。</td>
+            <td>速度 gate 通过，但 rollout gate 不通过；eff6k 有局部改善，LIBERO-10 仍 0/4。</td>
+            <td>不要扩大当前 FD 训练；需要改目标或监督。</td>
+          </tr>
+          <tr>
+            <td>MeanFlow paper-JVP</td>
+            <td>能跑 FP32；bf16/JVP 路径仍受 dtype 和资源约束。</td>
+            <td>FP32 2k gap-probe 0/7。</td>
+            <td>若继续，应先解决稳定性和资源成本，再做小规模诊断。</td>
+          </tr>
+          <tr>
+            <td>Joint finite-difference MeanFlow</td>
+            <td>模型与评测路径完整；full-state 保存曾因磁盘空间不足失败。</td>
+            <td>step_002000 gap-probe 0/7。</td>
+            <td>不建议沿当前 joint FD 直接扩训；优先重新审视 MeanFlow target 与 task-phase/gripper timing 监督。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note warn">
+        总结：源码已经覆盖了主要假设检验路径。当前失败不像单点代码 bug，更像 MeanFlow 平均速度目标在 FastWAM action policy 上没有保住长程 subgoal timing 和 gripper-motion 相位耦合。
+      </div>
+    </section>
+  </main>
+</body>
+</html>

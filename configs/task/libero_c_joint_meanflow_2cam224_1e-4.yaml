@@ -1,0 +1,40 @@
+# @package _global_
+
+defaults:
+  - override /data: libero_2cam
+  - override /model: fastwam_c_joint_meanflow
+  - _self_
+
+# dataloading
+batch_size: 1
+num_workers: 0
+
+model:
+  mot_checkpoint_mixed_attn: true
+  c_joint_meanflow:
+    objective: paper_jvp
+    random_timesteps: true
+    equal_time_prob: 0.25
+    trainable_scope: joint
+    train_proprio_encoder: true
+    start_timestep: 0.0
+    end_timestep: null
+    derivative_epsilon: 0.05
+
+# scheduler
+lr_scheduler_type: "cosine"
+learning_rate: 1e-4
+num_epochs: 1
+max_steps: 2000
+log_every: 10
+save_every: 500
+eval_every: 0
+save_training_state: true
+
+# training
+gradient_accumulation_steps: 1
+weight_decay: 1e-2
+resume: ./checkpoints/fastwam_release/libero_uncond_2cam224.pt
+
+wandb:
+  enabled: false

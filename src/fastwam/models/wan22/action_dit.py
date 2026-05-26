@@ -277,6 +277,19 @@ class ActionDiT(nn.Module):
                 f"Action token length {seq_len} exceeds RoPE cache {self.freqs.shape[0]}."
             )
 
+        action_tokens = action_tokens.to(
+            device=self.action_encoder.weight.device,
+            dtype=self.action_encoder.weight.dtype,
+        )
+        timestep = timestep.to(
+            device=self.time_embedding[0].weight.device,
+            dtype=self.time_embedding[0].weight.dtype,
+        )
+        context = context.to(
+            device=self.text_embedding[0].weight.device,
+            dtype=self.text_embedding[0].weight.dtype,
+        )
+
         t = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, timestep))
         t_mod = self.time_projection(t).unflatten(1, (6, self.hidden_dim))
 

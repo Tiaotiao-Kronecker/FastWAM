@@ -188,6 +188,10 @@ class FastWAM(torch.nn.Module):
         self.vae.to(*args, **kwargs)
         return self
 
+    def configure_trainable_parameters(self):
+        """Hook for subclasses that need to toggle trainable submodules."""
+        return None
+
     @staticmethod
     def _check_resize_height_width(height, width, num_frames):
         if height % 16 != 0:

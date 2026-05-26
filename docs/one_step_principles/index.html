@@ -1,0 +1,1361 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FastWAM One-Step 原理与实现对照</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f8;
+      --paper: #ffffff;
+      --ink: #202124;
+      --muted: #5f6773;
+      --line: #d9dde3;
+      --soft: #eef2f6;
+      --blue: #246b9f;
+      --green: #247a5b;
+      --amber: #9a6400;
+      --red: #a33a34;
+      --violet: #6b4ba3;
+      --code: #18212b;
+      --shadow: 0 16px 40px rgba(31, 38, 46, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
+      line-height: 1.58;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(36, 107, 159, 0.35);
+    }
+
+    a:hover { border-bottom-color: var(--blue); }
+
+    .page {
+      width: min(1180px, calc(100% - 36px));
+      margin: 0 auto;
+      padding: 32px 0 64px;
+    }
+
+    header {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      padding: 34px;
+      border-radius: 8px;
+    }
+
+    h1 {
+      margin: 0 0 14px;
+      font-size: clamp(30px, 4vw, 48px);
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 48px 0 16px;
+      font-size: 28px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 28px 0 10px;
+      font-size: 20px;
+      line-height: 1.3;
+      letter-spacing: 0;
+    }
+
+    h4 {
+      margin: 22px 0 8px;
+      font-size: 16px;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    p { margin: 0 0 12px; }
+
+    .lead {
+      max-width: 980px;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 4px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: #fbfcfd;
+      font-size: 13px;
+    }
+
+    nav {
+      margin: 20px 0 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 10px;
+    }
+
+    nav a {
+      display: block;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 10px 12px;
+      background: #fbfcfd;
+      color: var(--ink);
+    }
+
+    section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      margin-top: 18px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+      margin: 14px 0;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+      padding: 16px;
+    }
+
+    .card h3,
+    .card h4 { margin-top: 0; }
+
+    .tag {
+      display: inline-block;
+      margin-right: 8px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--muted);
+      font-size: 12px;
+      vertical-align: middle;
+    }
+
+    .tag.blue { color: var(--blue); border-color: rgba(36, 107, 159, 0.35); }
+    .tag.green { color: var(--green); border-color: rgba(36, 122, 91, 0.35); }
+    .tag.amber { color: var(--amber); border-color: rgba(154, 100, 0, 0.35); }
+    .tag.red { color: var(--red); border-color: rgba(163, 58, 52, 0.35); }
+    .tag.violet { color: var(--violet); border-color: rgba(107, 75, 163, 0.35); }
+
+    .note {
+      border-left: 4px solid var(--blue);
+      background: #f1f7fb;
+      padding: 12px 14px;
+      margin: 14px 0;
+      border-radius: 0 7px 7px 0;
+    }
+
+    .warn {
+      border-left-color: var(--amber);
+      background: #fff8ea;
+    }
+
+    .bad {
+      border-left-color: var(--red);
+      background: #fff2f0;
+    }
+
+    .ok {
+      border-left-color: var(--green);
+      background: #eff8f4;
+    }
+
+    pre {
+      margin: 12px 0 0;
+      padding: 14px 16px;
+      overflow-x: auto;
+      border-radius: 7px;
+      background: var(--code);
+      color: #e8edf2;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 0.95em;
+      background: #eef2f6;
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+
+    pre code {
+      background: transparent;
+      padding: 0;
+      border-radius: 0;
+      font-size: inherit;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 6px;
+      font-size: 14px;
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: #eef2f6;
+      font-weight: 650;
+    }
+
+    tbody tr:nth-child(even) td { background: #fbfcfd; }
+
+    .figure {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+      padding: 16px;
+      margin: 16px 0;
+    }
+
+    .figure svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .caption {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    ul, ol {
+      padding-left: 22px;
+      margin: 10px 0;
+    }
+
+    li { margin: 6px 0; }
+
+    .small { font-size: 13px; color: var(--muted); }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    .path {
+      color: var(--muted);
+      word-break: break-all;
+    }
+
+    @media (max-width: 860px) {
+      .page { width: min(100% - 24px, 1180px); padding-top: 18px; }
+      header, section { padding: 20px; }
+      .split { grid-template-columns: 1fr; }
+      table { font-size: 13px; }
+      th, td { padding: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>FastWAM One-Step 原理与实现对照</h1>
+      <p class="lead">
+        这份文档把我们当前讨论过的几种方案放在同一套符号体系下：官方 release baseline、
+        endpoint one-step、Shortcut Models 旧版与 official-style 修正版、MeanFlow。每一节先讲论文或基础理论公式，
+        再逐项对照本仓库实现，最后指出最容易出错的地方。
+      </p>
+      <div class="meta">
+        <span class="pill">生成日期：2026-05-14</span>
+        <span class="pill">代码库：FastWAM local workspace</span>
+        <span class="pill">核心对象：action diffusion / flow matching</span>
+      </div>
+      <nav aria-label="文档目录">
+        <a href="#symbols">统一符号</a>
+        <a href="#overview">方案总览</a>
+        <a href="#method-map">方法/数据/Loss 对照</a>
+        <a href="#baseline">Release Baseline</a>
+        <a href="#endpoint">Endpoint One-Step</a>
+        <a href="#shortcut">Shortcut Models</a>
+        <a href="#meanflow">MeanFlow</a>
+        <a href="#results">已有结果</a>
+        <a href="#pitfalls">容易出错点</a>
+        <a href="#sources">出处与代码索引</a>
+      </nav>
+    </header>
+
+    <section id="symbols">
+      <h2>统一符号</h2>
+      <p>
+        FastWAM 的 action scheduler 使用 <strong>sigma convention</strong>：
+        <code>sigma=0</code> 是真实 action，<code>sigma=1</code> 是纯噪声。为了避免和不同论文中的
+        <code>t</code> 方向混淆，本文主公式都使用 <code>sigma</code>。
+      </p>
+
+      <div class="figure" role="img" aria-label="sigma timeline">
+        <svg viewBox="0 0 960 250" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+              <path d="M0,0 L9,3 L0,6 Z" fill="#246b9f" />
+            </marker>
+            <marker id="arrow-green" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+              <path d="M0,0 L9,3 L0,6 Z" fill="#247a5b" />
+            </marker>
+            <marker id="arrow-amber" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+              <path d="M0,0 L9,3 L0,6 Z" fill="#9a6400" />
+            </marker>
+          </defs>
+          <rect x="0" y="0" width="960" height="250" rx="8" fill="#fbfcfd"/>
+          <line x1="120" y1="115" x2="840" y2="115" stroke="#5f6773" stroke-width="3"/>
+          <circle cx="120" cy="115" r="8" fill="#247a5b"/>
+          <circle cx="840" cy="115" r="8" fill="#a33a34"/>
+          <text x="86" y="88" font-size="18" fill="#202124">action</text>
+          <text x="78" y="142" font-size="16" fill="#5f6773">sigma = 0</text>
+          <text x="807" y="88" font-size="18" fill="#202124">noise</text>
+          <text x="806" y="142" font-size="16" fill="#5f6773">sigma = 1</text>
+
+          <path d="M835 52 C650 34, 390 34, 130 52" fill="none" stroke="#246b9f" stroke-width="4" marker-end="url(#arrow-blue)"/>
+          <text x="352" y="28" font-size="16" fill="#246b9f">inference: x_{sigma-d} = x_sigma - d v_theta</text>
+
+          <path d="M840 180 L660 180 L480 180 L300 180 L120 180" fill="none" stroke="#247a5b" stroke-width="4" marker-end="url(#arrow-green)"/>
+          <text x="314" y="208" font-size="16" fill="#247a5b">multi-step baseline: 多个 Euler 小步</text>
+
+          <path d="M840 224 L120 224" fill="none" stroke="#9a6400" stroke-width="4" marker-end="url(#arrow-amber)"/>
+          <text x="358" y="244" font-size="16" fill="#9a6400">one-step: 一次大步从噪声到 action</text>
+        </svg>
+        <div class="caption">图 1：本文使用 FastWAM 代码里的 sigma 方向。采样时 sigma 从 1 降到 0。</div>
+      </div>
+
+      <h3>基础路径</h3>
+      <pre><code>a        : 真实 action 序列，来自数据集并经过 dataset stats normalization
+epsilon  : 标准高斯噪声
+sigma    : 噪声强度，sigma in [0, 1]
+x_sigma  = (1 - sigma) * a + sigma * epsilon
+v*       = epsilon - a
+</code></pre>
+      <p>
+        因为 <code>x_sigma</code> 对 <code>sigma</code> 的导数就是 <code>epsilon - a</code>，
+        所以 flow matching 的目标速度是 <code>v* = epsilon - a</code>。
+      </p>
+
+      <h3>采样更新</h3>
+      <pre><code>给定当前状态 x_sigma 和模型预测速度 v_theta(x_sigma, sigma):
+
+d = sigma_current - sigma_next, 其中 d > 0
+x_next = x_sigma - d * v_theta(x_sigma, sigma)
+
+若 num_inference_steps = 1:
+  sigma_current = 1, sigma_next = 0, d = 1
+  x_0 = x_1 - v_theta(x_1, 1)
+</code></pre>
+
+      <div class="note">
+        <strong>重要：</strong>Shortcut 论文常用 <code>x_t = (1-t) x_0 + t x_1</code>，其中
+        <code>x_0</code> 是噪声，<code>x_1</code> 是数据，采样方向是 <code>t</code> 增大。
+        FastWAM 代码里 <code>sigma=1</code> 是噪声、<code>sigma=0</code> 是数据，采样方向是
+        <code>sigma</code> 减小。两者本质一致，但符号方向相反。
+      </div>
+    </section>
+
+    <section id="overview">
+      <h2>几种方案总览</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>方案</th>
+            <th>训练方式</th>
+            <th>推理方式</th>
+            <th>核心假设</th>
+            <th>当前判断</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>release baseline</strong></td>
+            <td>官方 FastWAM release checkpoint；我们不再训练</td>
+            <td>同一权重，改 <code>num_inference_steps=1/4/10</code></td>
+            <td>原始 flow model 已经学到足够直的 action path</td>
+            <td>LIBERO 上很强；RoboTwin quick 上 1-step 和 10-step 差距更明显</td>
+          </tr>
+          <tr>
+            <td><strong>endpoint one-step</strong></td>
+            <td>固定从纯噪声直接回 action，同时监督 velocity 和 endpoint</td>
+            <td><code>num_inference_steps=1</code></td>
+            <td>直接端点监督可以让一步更准</td>
+            <td>数学上 velocity/endpoint 在 sigma=1 时近似重复，实验较弱</td>
+          </tr>
+          <tr>
+            <td><strong>shortcut 旧版</strong></td>
+            <td>固定 <code>sigma=1,d=1</code>，加入两个半步一致性</td>
+            <td>一步，大步条件 <code>d=1</code></td>
+            <td>大步速度应等于两个半步平均</td>
+            <td>方向合理，但与论文训练分布不同；早期还有 conditioner 优化问题</td>
+          </tr>
+          <tr>
+            <td><strong>shortcut official-style</strong></td>
+            <td>按 Shortcut 论文：小步 flow grounding + 大步 bootstrap</td>
+            <td>一步，<code>d=1</code> 对应 <code>dt_base=0</code></td>
+            <td>大步能力从小步递归 bootstrap 到一步</td>
+            <td>更接近论文；LIBERO 2k pilot 表现差，说明还需排查训练长度/适配细节</td>
+          </tr>
+          <tr>
+            <td><strong>meanflow</strong></td>
+            <td>训练区间平均速度 <code>u(x_t,r,t)</code></td>
+            <td>一步：从噪声减去全区间平均速度</td>
+            <td>平均速度比瞬时速度更适合一步生成</td>
+            <td>我们当前实现是有限差分近似，不是论文 JVP；LIBERO 2k collapse</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+
+
+    <section id="method-map">
+      <h2>论文方法、训练数据、Loss 与代码实现总表</h2>
+      <p>
+        这一节把后面几种 one-step 方法先压缩成一张判断表。这里的“训练数据制作”不是指重新采集数据，
+        而是指从现有 batch 的真实 action、状态、图像和语言条件中如何构造 noisy action、timestep、step size 以及监督 target。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th>论文/理论目标</th>
+            <th>训练数据制作</th>
+            <th>Loss 是否和论文一致</th>
+            <th>FastWAM 代码落点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Release baseline</td>
+            <td>普通 flow matching：学习瞬时速度 <code>v*=epsilon-a</code></td>
+            <td>用真实 action <code>a</code> 与高斯噪声 <code>epsilon</code> 构造 <code>x_sigma=(1-sigma)a+sigma epsilon</code>，随机 <code>sigma</code></td>
+            <td>一致。这就是 FastWAM 原始 action flow loss</td>
+            <td><code>fastwam.py::training_loss</code>，<code>scheduler_continuous.py</code></td>
+          </tr>
+          <tr>
+            <td>Endpoint one-step</td>
+            <td>无独立论文；工程 baseline：固定最大噪声直接回 action</td>
+            <td>固定 <code>sigma=1</code>，输入纯噪声 action，target 是 <code>epsilon-a</code> 和端点 <code>a</code></td>
+            <td>不对应论文方法；且 velocity loss 与 endpoint loss 在 <code>sigma=1</code> 时数学等价</td>
+            <td><code>fastwam_one_step_action.py</code></td>
+          </tr>
+          <tr>
+            <td>Shortcut 旧版</td>
+            <td>想模拟 Shortcut 的“大步 = 两个半步平均”</td>
+            <td>固定 <code>sigma=1,d=1</code>，同时预测大步、半步 1、半步 2</td>
+            <td>不一致。缺少论文的小步 grounding + 多尺度 bootstrap 分布</td>
+            <td><code>fastwam_one_step_shortcut.py</code></td>
+          </tr>
+          <tr>
+            <td>Shortcut official-style</td>
+            <td>Shortcut Models：step-conditioned flow，逐级 bootstrap 到大步</td>
+            <td>batch 内随机混合 flow 样本和 bootstrap 样本；使用 <code>dt_base=-log2(d)</code></td>
+            <td>较一致。仍是迁移到 action-only FastWAM fine-tune，训练规模与论文不同</td>
+            <td><code>fastwam_one_step_shortcut_official.py</code></td>
+          </tr>
+          <tr>
+            <td>MeanFlow 当前版</td>
+            <td>MeanFlow：学习区间平均速度 <code>u(z_t,r,t)</code></td>
+            <td>当前固定 <code>r=0,t=1</code>，用有限差分构造 <code>du/dt</code> target</td>
+            <td>不一致。论文关键是随机 <code>r,t</code> 与 JVP 方向导数</td>
+            <td><code>fastwam_one_step_meanflow.py</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note warn">
+        <strong>当前结论：</strong>如果继续投入 one-step 方法，优先级应是
+        <code>Shortcut official-style</code> 的更长训练和更合适 eval 集；MeanFlow 需要先改成论文 JVP 形式，
+        否则现有 collapse 不能被解释成 MeanFlow 方法本身失败。
+      </div>
+    </section>
+
+    <section id="baseline">
+      <h2>Release Baseline：官方 FastWAM 多步/一步采样</h2>
+      <p>
+        这是最重要的对照组。<strong>release_1、release_4、release_10 不是不同训练版本</strong>，
+        而是同一个官方 checkpoint 在 eval 时传不同的 <code>EVALUATION.num_inference_steps</code>。
+      </p>
+
+      <h3>理论公式：普通 Flow Matching</h3>
+      <p>
+        Flow Matching 的基础思想来自 Lipman et al. 2022。在线性路径上，训练模型预测
+        <code>x_sigma</code> 沿噪声强度变化的速度。
+      </p>
+      <pre><code>x_sigma = (1 - sigma) * a + sigma * epsilon
+v*      = d x_sigma / d sigma = epsilon - a
+
+L_action = E[ w(sigma) * || v_theta(x_sigma, sigma, obs, instruction) - v* ||^2_masked ]
+
+L_total = lambda_video * L_video + lambda_action * L_action
+</code></pre>
+
+      <h3>代码实现对照</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>理论步骤</th>
+            <th>本仓库实现</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>采样 action 噪声 <code>epsilon</code> 和训练 timestep/sigma</td>
+            <td><a href="../../src/fastwam/models/wan22/fastwam.py">src/fastwam/models/wan22/fastwam.py</a> 的 <code>training_loss</code> 中 <code>noise_action</code>、<code>sample_training_t</code></td>
+          </tr>
+          <tr>
+            <td>构造 <code>x_sigma</code></td>
+            <td><a href="../../src/fastwam/models/wan22/schedulers/scheduler_continuous.py">scheduler_continuous.py</a> 的 <code>add_noise</code>：<code>(1-sigma)*sample + sigma*noise</code></td>
+          </tr>
+          <tr>
+            <td>目标速度 <code>epsilon - a</code></td>
+            <td><code>training_target(...)</code> 返回 <code>noise - sample</code></td>
+          </tr>
+          <tr>
+            <td>masked MSE</td>
+            <td>action padding 通过 <code>action_is_pad</code> 排除，避免 padding token 参与 loss</td>
+          </tr>
+          <tr>
+            <td>推理 Euler step</td>
+            <td><code>step(model_output, delta, sample)</code>；因为 <code>delta = sigma_next - sigma_current</code> 为负，所以等价于 <code>x - d*v</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note ok">
+        <strong>我们现在的 baseline 定义：</strong>官方 release checkpoint 直接下载后即可推理；
+        需要配套 <code>*_dataset_stats.json</code> 做 action/state normalization。除了 shortcut/meanflow 等 one-step 方案，
+        baseline 本身没有再 fine-tune。
+      </div>
+    </section>
+
+    <section id="endpoint">
+      <h2>Endpoint One-Step：直接端点微调</h2>
+      <p>
+        这是我们最早尝试的一步化方案。它没有对应独立论文方法，更像一个直接工程 baseline：
+        固定从 <code>sigma=1</code> 的纯噪声出发，让模型一步回到真实 action。
+      </p>
+
+      <h3>公式</h3>
+      <pre><code>固定 sigma = 1:
+x_1 = epsilon
+v*  = epsilon - a
+
+模型预测:
+v_theta = f_theta(x_1, sigma=1)
+a_hat   = x_1 - 1 * v_theta
+
+L_velocity = || v_theta - v* ||^2_masked
+L_endpoint = || a_hat - a ||^2_masked
+L_endpoint_one_step = 0.5 * L_velocity + 0.5 * L_endpoint
+</code></pre>
+
+      <h3>一个关键等价关系</h3>
+      <p>
+        当 <code>sigma=1</code> 时，endpoint loss 和 velocity loss 本质上是同一个误差：
+      </p>
+      <pre><code>a_hat - a
+= (epsilon - v_theta) - a
+= (epsilon - a) - v_theta
+= v* - v_theta
+
+所以 ||a_hat - a||^2 = ||v_theta - v*||^2
+</code></pre>
+      <p>
+        这解释了为什么 endpoint one-step 看起来有两个 loss，但并没有提供两个独立监督信号。
+      </p>
+
+      <h3>训练数据制作</h3>
+      <p>
+        Endpoint one-step 不改变原始 demonstration 数据。每个 batch 仍来自 LIBERO/RoboTwin 的真实观测、语言和 action chunk；
+        变化只发生在 action latent/token 侧：丢弃随机中间 <code>sigma</code>，固定用最大噪声状态训练。
+      </p>
+      <pre><code>给定 batch:
+  image/context/proprio/instruction/action = data loader 输出
+  a = normalized action chunk
+  epsilon ~ N(0, I)
+
+构造 one-step 样本:
+  sigma = 1
+  x_1 = epsilon
+  target_velocity = epsilon - a
+  target_endpoint = a
+</code></pre>
+
+      <h3>Loss 是否和论文一致</h3>
+      <p>
+        这个方法没有对应的 one-step 论文公式；它是我们为 FastWAM 写的工程 baseline。
+        因为 <code>L_endpoint</code> 和 <code>L_velocity</code> 在 <code>sigma=1</code> 时等价，
+        所以它更像“重复加权的最大噪声 flow matching”，不是 Shortcut/MeanFlow 那类有额外理论约束的 loss。
+      </p>
+
+      <h3>代码实现对照</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>公式项</th>
+            <th>实现位置</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>sigma=1</code> 或最大 timestep</td>
+            <td><a href="../../src/fastwam/models/wan22/fastwam_one_step_action.py">fastwam_one_step_action.py</a> 的 <code>_build_one_step_action_timestep</code></td>
+          </tr>
+          <tr>
+            <td>构造 <code>noisy_action</code> 与 <code>target_action_velocity</code></td>
+            <td><code>training_loss</code> 中 <code>add_noise(action, noise_action, timestep_action)</code> 和 <code>training_target(...)</code></td>
+          </tr>
+          <tr>
+            <td><code>a_hat = noisy_action - sigma * pred_velocity</code></td>
+            <td><code>pred_action_endpoint = noisy_action - sigma * pred_action_velocity</code></td>
+          </tr>
+          <tr>
+            <td><code>L_velocity</code></td>
+            <td><code>loss_action_velocity</code></td>
+          </tr>
+          <tr>
+            <td><code>L_endpoint</code></td>
+            <td><code>loss_action_endpoint</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note warn">
+        <strong>判断：</strong>endpoint 微调适合作为 sanity check，但它不是很强的一步化理论。
+        它只告诉模型“从纯噪声直接到数据”，没有教模型“大步”和“多个小步”之间如何一致。
+      </div>
+    </section>
+
+    <section id="shortcut">
+      <h2>Shortcut Models：一步/多步统一的 step-size conditioned flow</h2>
+      <p>
+        Shortcut Models 的出处是 Kevin Frans, Danijar Hafner, Sergey Levine, Pieter Abbeel 的
+        <em>One Step Diffusion via Shortcut Models</em>。核心改动是：模型不仅看当前噪声水平，
+        还看这一步想走多远，也就是 step size <code>d</code>。
+      </p>
+
+      <h3>论文公式：step-conditioned velocity</h3>
+      <p>用论文方向写，<code>t</code> 从噪声走向数据：</p>
+      <pre><code>x_t = (1 - t) * x_0 + t * x_1
+s_theta(x_t, t, d) ≈ (x_{t+d} - x_t) / d
+x_{t+d} = x_t + d * s_theta(x_t, t, d)
+</code></pre>
+
+      <p>用 FastWAM sigma 方向重写：</p>
+      <pre><code>x_sigma = (1 - sigma) * a + sigma * epsilon
+u_theta(x_sigma, sigma, d) ≈ (x_sigma - x_{sigma-d}) / d
+x_{sigma-d} = x_sigma - d * u_theta(x_sigma, sigma, d)
+</code></pre>
+
+      <h3>论文公式：两个半步要等于一个大步</h3>
+      <p>论文方向：</p>
+      <pre><code>s_theta(x_t, t, 2d)
+≈ 0.5 * [
+    s_theta(x_t,       t,     d)
+  + s_theta(x_{t+d},   t+d,   d)
+  ]
+</code></pre>
+
+      <p>FastWAM sigma 方向：</p>
+      <pre><code>u_theta(x_sigma, sigma, 2d)
+≈ 0.5 * [
+    u_theta(x_sigma,       sigma,     d)
+  + u_theta(x_{sigma-d},   sigma-d,   d)
+  ]
+</code></pre>
+
+      <div class="figure" role="img" aria-label="shortcut consistency diagram">
+        <svg viewBox="0 0 960 330" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrow-s-blue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+              <path d="M0,0 L9,3 L0,6 Z" fill="#246b9f" />
+            </marker>
+            <marker id="arrow-s-green" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+              <path d="M0,0 L9,3 L0,6 Z" fill="#247a5b" />
+            </marker>
+            <marker id="arrow-s-violet" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+              <path d="M0,0 L9,3 L0,6 Z" fill="#6b4ba3" />
+            </marker>
+          </defs>
+          <rect x="0" y="0" width="960" height="330" rx="8" fill="#fbfcfd"/>
+          <line x1="120" y1="170" x2="840" y2="170" stroke="#5f6773" stroke-width="3"/>
+          <circle cx="840" cy="170" r="9" fill="#a33a34"/>
+          <circle cx="480" cy="170" r="9" fill="#5f6773"/>
+          <circle cx="120" cy="170" r="9" fill="#247a5b"/>
+          <text x="804" y="198" font-size="16" fill="#5f6773">sigma</text>
+          <text x="836" y="198" font-size="16" fill="#5f6773">1</text>
+          <text x="456" y="198" font-size="16" fill="#5f6773">sigma-d</text>
+          <text x="98" y="198" font-size="16" fill="#5f6773">0</text>
+
+          <path d="M835 105 C690 55, 280 55, 125 105" fill="none" stroke="#246b9f" stroke-width="5" marker-end="url(#arrow-s-blue)"/>
+          <text x="371" y="44" font-size="17" fill="#246b9f">一个大步 d=1</text>
+
+          <path d="M835 255 C735 292, 586 292, 486 255" fill="none" stroke="#247a5b" stroke-width="5" marker-end="url(#arrow-s-green)"/>
+          <path d="M474 255 C370 292, 228 292, 126 255" fill="none" stroke="#247a5b" stroke-width="5" marker-end="url(#arrow-s-green)"/>
+          <text x="375" y="315" font-size="17" fill="#247a5b">两个半步 d/2 + d/2</text>
+
+          <path d="M840 170 L480 170" stroke="#6b4ba3" stroke-width="4" marker-end="url(#arrow-s-violet)"/>
+          <path d="M480 170 L120 170" stroke="#6b4ba3" stroke-width="4" marker-end="url(#arrow-s-violet)"/>
+          <text x="362" y="142" font-size="16" fill="#6b4ba3">速度平均后应匹配大步速度</text>
+        </svg>
+        <div class="caption">图 2：Shortcut 的训练信号不是只看端点，而是约束“一步大跳”和“两步小跳”的平均速度一致。</div>
+      </div>
+
+      <h3>训练数据制作：论文视角</h3>
+      <p>
+        Shortcut 不需要额外标注数据。它从同一个真实样本 <code>(obs, instruction, a)</code> 出发，
+        额外采样噪声 <code>epsilon</code>、噪声位置 <code>sigma</code> 和步长 <code>d</code>，把一个普通 action chunk
+        变成“某个噪声位置、某个步长下应该走的速度”训练样本。
+      </p>
+      <pre><code>Flow grounding 样本:
+  a, obs, instruction 来自数据集
+  epsilon ~ N(0, I)
+  选择最小步长 d_min = 1 / N
+  选择 sigma 所在 section
+  x_sigma = (1 - sigma) * a + sigma * epsilon
+  target = epsilon - a
+
+Bootstrap 样本:
+  选择较大步长 d = 2^(-dt_base)
+  x_sigma = (1 - sigma) * a + sigma * epsilon
+  v1 = stopgrad(u_theta(x_sigma, sigma, d/2))
+  x_mid = x_sigma - (d/2) * v1
+  v2 = stopgrad(u_theta(x_mid, sigma-d/2, d/2))
+  target = 0.5 * (v1 + v2)
+</code></pre>
+
+      <h3>论文训练：flow grounding + bootstrap</h3>
+      <p>
+        论文官方代码把 batch 混成两类样本：
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>样本类型</th>
+            <th>目标</th>
+            <th>作用</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Flow matching 小步样本</td>
+            <td><code>v_t = x_1 - x_0</code>，对应最小 step size</td>
+            <td>给模型一个真实、稳定的小步速度锚点</td>
+          </tr>
+          <tr>
+            <td>Bootstrap 大步样本</td>
+            <td><code>v_target = 0.5 * (v_half_1 + v_half_2)</code></td>
+            <td>用两个更小 step 的模型预测蒸馏出一个更大 step 的目标</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>我们旧版 shortcut 实现</h3>
+      <p>
+        旧版对应 <a href="../../src/fastwam/models/wan22/fastwam_one_step_shortcut.py">fastwam_one_step_shortcut.py</a>。
+        它加入了 step-size conditioner，但训练分布是固定的：默认 <code>start_timestep=null</code> 代表最大 timestep，
+        <code>step_size=1.0</code> 代表一步从噪声到 action。
+      </p>
+      <pre><code>固定:
+sigma_start = 1
+d = 1
+
+pred_large = u_theta(x_sigma, sigma, d)
+pred_half1 = u_theta(x_sigma, sigma, d/2)
+x_mid      = x_sigma - (d/2) * stopgrad(pred_half1)
+pred_half2 = u_theta(x_mid, sigma-d/2, d/2)
+
+target_v   = epsilon - a
+target_big = 0.5 * (stopgrad(pred_half1) + stopgrad(pred_half2))
+
+L_old_shortcut =
+  lambda_v        * MSE(pred_large, target_v)
++ lambda_endpoint * MSE(x_sigma - d*pred_large, x_sigma - d*target_v)
++ lambda_cons     * MSE(pred_large, target_big)
++ lambda_half     * 0.5 * [MSE(pred_half1, target_v) + MSE(pred_half2, target_v)]
+</code></pre>
+
+      <div class="note warn">
+        <strong>旧版的主要偏差：</strong>它固定在 <code>sigma=1,d=1</code>，没有像论文一样从小步 flow target
+        逐级 bootstrap 到大步；step conditioning 也不是论文代码里的 <code>dt_base=-log2(d)</code> 离散编码。
+        早期训练还存在额外 conditioner 参数未进入 optimizer 的问题，后来已通过
+        <code>extra_trainable_parameters()</code> 修正。
+      </div>
+
+      <h3>我们修正版 official-style shortcut</h3>
+      <p>
+        修正版对应 <a href="../../src/fastwam/models/wan22/fastwam_one_step_shortcut_official.py">fastwam_one_step_shortcut_official.py</a>，
+        目的是更接近 Shortcut Models 官方 JAX 代码。
+      </p>
+      <p>
+        数据制作上，它仍然使用原 FastWAM 的 action chunk、图像 context、proprio 和语言 instruction；
+        新增的是 per-sample 的 <code>shortcut_dt_base</code> 条件和 flow/bootstrap target。代码里用
+        <code>shortcut_bootstrap_ratio</code> 决定当前 batch 走 grounding 还是 bootstrap。
+      </p>
+      <pre><code>配置:
+num_denoise_steps = 128
+max_dt_base = log2(128) = 7
+d = 2^(-dt_base)
+
+Flow grounding:
+  随机 section_index
+  sigma = 1 - section_index / 128
+  dt_base = 7  # 最小步长 d=1/128
+  target = epsilon - a
+
+Bootstrap:
+  随机 dt_base in {0, ..., 6}
+  d = 2^(-dt_base)
+  half_dt_base = dt_base + 1
+  half_step = d / 2
+
+  v1 = stopgrad(u_theta(x_sigma, sigma, half_dt_base))
+  x_mid = x_sigma - half_step * v1
+  v2 = stopgrad(u_theta(x_mid, sigma-half_step, half_dt_base))
+  target = 0.5 * (v1 + v2)
+
+Loss:
+  L_shortcut_official = MSE(u_theta(x_sigma, sigma, dt_base), target)
+</code></pre>
+
+      <h3>Loss 是否和论文一致</h3>
+      <p>
+        official-style 版本的 loss 形式已经接近 Shortcut 论文：训练时只优化一个 target MSE，
+        target 要么来自真实 flow grounding，要么来自两个半步 bootstrap。差异主要在任务域和训练制度：
+        论文是在生成模型训练流程里学习完整 shortcut flow；我们是在 FastWAM release checkpoint 上做 action-only fine-tune，
+        video branch 基本冻结，训练步数也短得多。
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>论文/官方代码点</th>
+            <th>修正版实现</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>dt_base</code> 条件，而不是直接给连续 step size</td>
+            <td><code>_apply_shortcut_dt_base_conditioning</code>，并用 sinusoidal embedding 注入 action expert 的 <code>t_mod</code></td>
+          </tr>
+          <tr>
+            <td>最小步长 flow matching target</td>
+            <td><code>_sample_flow_shortcut_batch</code>，<code>shortcut_dt_base=max_dt_base</code>，target 为 <code>noise-action</code></td>
+          </tr>
+          <tr>
+            <td>大步由两个半步 bootstrap</td>
+            <td><code>_sample_bootstrap_shortcut_batch</code> + <code>with torch.no_grad()</code> 计算 <code>v1,v2</code></td>
+          </tr>
+          <tr>
+            <td>单一 shortcut target loss</td>
+            <td><code>loss_shortcut_target</code>，配置里 <code>lambda_shortcut_target=1.0</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>第一性原理分析：为什么 shortcut 可能表现差</h3>
+      <ul>
+        <li><strong>如果 release_1 已经很强，提升空间天然小。</strong>LIBERO 上 release_1 已经 95.80%，大部分错误不是单纯积分步数造成的。</li>
+        <li><strong>旧版 shortcut 的训练分布太窄。</strong>只在 <code>sigma=1,d=1</code> 训练，模型没有学会不同噪声水平和不同步长的一致关系。</li>
+        <li><strong>大步目标来自模型自身，容易把偏差递归放大。</strong>Bootstrap 的前提是半步模型已经可靠；如果半步不可靠，大步 target 就是错误平均。</li>
+        <li><strong>机器人 action 是多模态且受状态强约束。</strong>图像生成中的一步样本质量不等于控制成功率；一点 action 偏差可能导致任务失败。</li>
+        <li><strong>训练步数可能远不足。</strong>Shortcut 论文是从完整训练流程中学 step-conditioned flow；我们是对强 pretrained checkpoint 做短程 fine-tune。</li>
+        <li><strong>conditioner 参数必须真的被优化。</strong>之前 trainer 只收集 <code>model.dit</code> 参数，新增的 conditioner 不会更新；现在已修复。</li>
+      </ul>
+    </section>
+
+    <section id="meanflow">
+      <h2>MeanFlow：直接学习区间平均速度</h2>
+      <p>
+        MeanFlow 出处是 Zhengyang Geng, Mingyang Deng, Xingjian Bai, J. Zico Kolter, Kaiming He 的
+        <em>Mean Flows for One-step Generative Modeling</em>。它的关键思想是：
+        普通 flow matching 学的是某个时间点的瞬时速度 <code>v</code>；一步生成真正需要的是从噪声到数据
+        整个区间的平均速度 <code>u</code>。
+      </p>
+
+      <h3>论文公式：平均速度</h3>
+      <p>MeanFlow 论文常用 <code>t</code> 表示噪声强度，<code>r &lt; t</code> 是目标区间的另一端：</p>
+      <pre><code>z_t = (1 - t) * x + t * epsilon
+v   = epsilon - x
+
+u(z_t, r, t) = (z_t - z_r) / (t - r)
+             = average velocity over interval [r, t]
+
+one-step sampling:
+  x_hat = epsilon - u(epsilon, r=0, t=1)
+</code></pre>
+
+      <h3>训练数据制作：论文视角</h3>
+      <p>
+        MeanFlow 同样不需要额外人工标注。它把同一个 action chunk 变成区间监督样本：
+        随机选择区间端点 <code>r,t</code>，构造 <code>z_t</code>，模型输入同时包含 <code>r</code> 和 <code>t</code>。
+        当 <code>r=t</code> 时，平均速度退化为普通瞬时速度；当 <code>r=0,t=1</code> 时，它就是完整 one-step 需要的平均速度。
+      </p>
+      <pre><code>给定真实 action a 和噪声 epsilon:
+  随机采样 0 <= r <= t <= 1
+  z_t = (1 - t) * a + t * epsilon
+  v = epsilon - a
+  模型预测 u_theta(z_t, r, t)
+  用 JVP 构造 u_target = v - (t-r) * du/dt
+</code></pre>
+
+      <h3>论文公式：MeanFlow identity</h3>
+      <p>
+        MeanFlow 推导出一个可训练恒等式，把平均速度 <code>u</code> 和瞬时速度 <code>v</code> 联系起来：
+      </p>
+      <pre><code>u_target = v - (t - r) * d u / d t
+L_meanflow = || u_theta(z_t, r, t) - stopgrad(u_target) ||^2
+</code></pre>
+      <p>
+        官方 JAX 实现用 <code>jax.jvp</code> 同时得到 <code>u</code> 和方向导数 <code>du/dt</code>：
+      </p>
+      <pre><code>u, du_dt = jax.jvp(
+  u_fn,
+  (z_t, t, r),
+  (v_g, 1, 0)
+)
+u_tgt = v_g - (t-r) * du_dt
+</code></pre>
+
+      <div class="figure" role="img" aria-label="meanflow average velocity diagram">
+        <svg viewBox="0 0 960 300" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrow-m-blue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+              <path d="M0,0 L9,3 L0,6 Z" fill="#246b9f" />
+            </marker>
+            <marker id="arrow-m-red" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+              <path d="M0,0 L9,3 L0,6 Z" fill="#a33a34" />
+            </marker>
+          </defs>
+          <rect x="0" y="0" width="960" height="300" rx="8" fill="#fbfcfd"/>
+          <path d="M130 220 C260 120, 360 230, 480 150 C610 64, 700 130, 835 70" fill="none" stroke="#5f6773" stroke-width="3"/>
+          <circle cx="130" cy="220" r="8" fill="#247a5b"/>
+          <circle cx="835" cy="70" r="8" fill="#a33a34"/>
+          <text x="96" y="248" font-size="16" fill="#247a5b">data r=0</text>
+          <text x="790" y="52" font-size="16" fill="#a33a34">noise t=1</text>
+
+          <path d="M835 70 L130 220" stroke="#246b9f" stroke-width="5" marker-end="url(#arrow-m-blue)"/>
+          <text x="390" y="118" font-size="17" fill="#246b9f">平均速度 u：跨整个区间</text>
+
+          <path d="M480 150 C520 112, 552 98, 590 92" fill="none" stroke="#a33a34" stroke-width="5" marker-end="url(#arrow-m-red)"/>
+          <text x="600" y="108" font-size="17" fill="#a33a34">瞬时速度 v：局部切线</text>
+        </svg>
+        <div class="caption">图 3：MeanFlow 直接学习区间平均速度，而不是只学习每个时间点的局部切线。</div>
+      </div>
+
+      <h3>我们当前 meanflow 实现</h3>
+      <p>
+        当前实现位于 <a href="../../src/fastwam/models/wan22/fastwam_one_step_meanflow.py">fastwam_one_step_meanflow.py</a>。
+        它把 MeanFlow 接到 FastWAM action 分支上，并采用有限差分近似 <code>du/dt</code>。
+      </p>
+      <p>
+        数据制作上，当前版没有随机采样 <code>r,t</code>，而是默认固定完整区间：
+        <code>r=0</code>，<code>t=1</code>。这让训练目标集中在纯 one-step 端点，但失去了论文中用中间区间稳定学习平均速度的机制。
+      </p>
+      <pre><code>默认配置:
+r = meanflow_start_timestep = 0
+t = meanflow_end_timestep = max timestep = 1
+epsilon_fd = 0.05
+
+u_t = u_theta(x_t, r, t)
+x_{t-eps} = x_t - eps * v*
+u_prev = u_theta(x_{t-eps}, r, t-eps)
+
+du_dt ≈ (stopgrad(u_t) - stopgrad(u_prev)) / eps
+u_target = v* - (t-r) * du_dt
+
+a_hat = x_t - (t-r) * u_t
+
+L_current_meanflow =
+  0.5  * MSE(u_t, u_target)
++ 0.25 * MSE(u_t, v*)
++ 0.25 * MSE(a_hat, a)
+</code></pre>
+
+      <h3>Loss 是否和论文一致</h3>
+      <p>
+        当前 loss 不等同于论文 MeanFlow。论文的关键是通过自动微分 JVP 得到方向导数，并用
+        <code>u_target = v - (t-r) du/dt</code> 训练平均速度；我们现在用两个 forward 的有限差分近似，
+        且额外加入 velocity 和 endpoint loss。因此当前实验结果只能说明这个 FastWAM 适配版本失败，
+        不能说明严格 MeanFlow 方法失败。
+      </p>
+
+      <h3>与论文 MeanFlow 的关键差异</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>论文/官方实现</th>
+            <th>我们当前实现</th>
+            <th>风险</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>随机采样 <code>r,t</code>，其中一部分样本令 <code>r=t</code> 保留普通 velocity 监督</td>
+            <td>默认固定 <code>r=0,t=1</code></td>
+            <td>训练只覆盖全区间，缺少中间区间的稳定约束</td>
+          </tr>
+          <tr>
+            <td>用自动微分 JVP 计算 <code>du/dt</code></td>
+            <td>用有限差分近似，并且对两个预测都 stop-gradient</td>
+            <td>目标可能噪声大，且不等价于论文的方向导数训练</td>
+          </tr>
+          <tr>
+            <td>MeanFlow 从头训练，不依赖 teacher/distillation</td>
+            <td>从 FastWAM release checkpoint 短程 fine-tune</td>
+            <td>pretrained instantaneous flow 未必能平滑转成 average flow 参数化</td>
+          </tr>
+          <tr>
+            <td>官方 loss 主要是 normalized meanflow target loss</td>
+            <td>额外加 velocity/endpoint loss</td>
+            <td>三个目标可能相互拉扯，尤其 <code>u</code> 不应该总等于瞬时 <code>v</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note bad">
+        <strong>当前实验解释：</strong>LIBERO 上 <code>meanflow_1_2k</code> 只有 6.70%。
+        这不是轻微调参问题，更像目标函数/实现形式与论文 MeanFlow 不匹配。
+        若继续做 MeanFlow，应优先改成 JVP 版本、随机 <code>r,t</code> 采样，并确认是否从头训练或更长程训练。
+      </div>
+    </section>
+
+    <section id="results">
+      <h2>已有结果放在同一张表里看</h2>
+      <h3>LIBERO</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th>Overall</th>
+            <th>libero_spatial</th>
+            <th>libero_object</th>
+            <th>libero_goal</th>
+            <th>libero_10</th>
+            <th>备注</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>release_10</td>
+            <td>96.80</td>
+            <td>97.80</td>
+            <td>99.40</td>
+            <td>95.40</td>
+            <td>94.60</td>
+            <td>官方 checkpoint，10 denoise steps</td>
+          </tr>
+          <tr>
+            <td>release_1</td>
+            <td>95.80</td>
+            <td>96.60</td>
+            <td>99.20</td>
+            <td>95.20</td>
+            <td>92.20</td>
+            <td>同一官方 checkpoint，1 denoise step</td>
+          </tr>
+          <tr>
+            <td>shortcut_1_2k</td>
+            <td>95.00</td>
+            <td>96.20</td>
+            <td>98.40</td>
+            <td>93.60</td>
+            <td>91.80</td>
+            <td>旧版 shortcut，2k fine-tune</td>
+          </tr>
+          <tr>
+            <td>meanflow_1_2k</td>
+            <td>6.70</td>
+            <td>10.60</td>
+            <td>3.20</td>
+            <td>12.40</td>
+            <td>0.60</td>
+            <td>当前 finite-difference meanflow，collapse</td>
+          </tr>
+          <tr>
+            <td>shortcut_official_1_2k</td>
+            <td>84.45</td>
+            <td colspan="4">pilot 结果已完成，整体低于 release_1</td>
+            <td>更接近论文，但 2k pilot 不理想</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>RoboTwin quick clean20</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th>平均成功率</th>
+            <th>任务数</th>
+            <th>每任务 episodes</th>
+            <th>备注</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>release_1</td>
+            <td>92.50%</td>
+            <td>8</td>
+            <td>20</td>
+            <td>官方 RoboTwin checkpoint，1 step</td>
+          </tr>
+          <tr>
+            <td>release_4</td>
+            <td>98.75%</td>
+            <td>8</td>
+            <td>20</td>
+            <td>同权重，4 steps</td>
+          </tr>
+          <tr>
+            <td>release_10</td>
+            <td>97.50%</td>
+            <td>8</td>
+            <td>20</td>
+            <td>同权重，10 steps</td>
+          </tr>
+          <tr>
+            <td>endpoint_1</td>
+            <td>19.37%</td>
+            <td>8</td>
+            <td>20</td>
+            <td>one-step action endpoint</td>
+          </tr>
+          <tr>
+            <td>shortcut_1</td>
+            <td>21.25%</td>
+            <td>8</td>
+            <td>20</td>
+            <td>旧版 shortcut 10-step checkpoint quick eval</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>LIBERO 长程/困难 eval 集</h3>
+      <p>
+        为了避免 full LIBERO 被 easy tasks 稀释，我们新增了标准任务子集。它们不修改 LIBERO 环境，
+        只改变评测任务列表，因此仍然能和 release baseline 对齐。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>集合</th>
+            <th>任务数</th>
+            <th>release_1</th>
+            <th>release_10</th>
+            <th>gap</th>
+            <th>用途</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>libero_long_official</code></td>
+            <td>10</td>
+            <td>92.20</td>
+            <td>94.60</td>
+            <td>+2.40</td>
+            <td>官方 <code>libero_10</code>，最适合正式长程 readout</td>
+          </tr>
+          <tr>
+            <td><code>libero_long_horizon_v1</code></td>
+            <td>13</td>
+            <td>91.85</td>
+            <td>95.54</td>
+            <td>+3.69</td>
+            <td>开发用长程/困难集合，默认推荐</td>
+          </tr>
+          <tr>
+            <td><code>libero_gap_probe_v1</code></td>
+            <td>7</td>
+            <td>89.71</td>
+            <td>96.57</td>
+            <td>+6.86</td>
+            <td>按已有 gap 选出的 quick probe，不适合正式报告</td>
+          </tr>
+        </tbody>
+      </table>
+      <pre><code>NUM_INFERENCE_STEPS=1 \
+TASK_SET=libero_long_horizon_v1 \
+experiments/libero/run_libero_task_set_eval.sh
+
+NUM_INFERENCE_STEPS=10 \
+TASK_SET=libero_long_horizon_v1 \
+RUN_TAG=libero_long_horizon_v1_release10 \
+experiments/libero/run_libero_task_set_eval.sh
+</code></pre>
+      <p class="small">
+        详细设计见 <a href="../plan/2026-05-14-libero-long-horizon-eval-plan.md">docs/plan/2026-05-14-libero-long-horizon-eval-plan.md</a>。
+      </p>
+
+      <div class="note">
+        <strong>实验启发：</strong>LIBERO 的 release_1 已接近饱和，one-step 方法很难显示提升；
+        RoboTwin quick 上 release_1 和 release_4/10 有更大差距，因此更适合做 one-step 方法是否有效的初筛。
+      </div>
+    </section>
+
+    <section id="pitfalls">
+      <h2>最容易出错的地方</h2>
+      <div class="grid">
+        <div class="card">
+          <h3><span class="tag red">1</span>把 release_1/4/10 当成不同权重</h3>
+          <p>它们是同一个 official checkpoint，只是 eval 时 <code>num_inference_steps</code> 不同。</p>
+        </div>
+        <div class="card">
+          <h3><span class="tag red">2</span>漏掉 dataset stats</h3>
+          <p>action/state 需要使用对应的 <code>*_dataset_stats.json</code> 归一化和反归一化；否则模型输入输出尺度会错。</p>
+        </div>
+        <div class="card">
+          <h3><span class="tag red">3</span>符号方向混淆</h3>
+          <p>Shortcut 论文的 <code>t</code> 方向和 FastWAM 的 <code>sigma</code> 方向相反；更新符号也相反。</p>
+        </div>
+        <div class="card">
+          <h3><span class="tag amber">4</span>只固定 sigma=1 训练</h3>
+          <p>一步 endpoint 或旧 shortcut 没有覆盖中间噪声水平，难以学到稳定 step-conditioned flow。</p>
+        </div>
+        <div class="card">
+          <h3><span class="tag amber">5</span>新增 conditioner 没进 optimizer</h3>
+          <p>新增模块如果挂在 <code>action_expert</code> 下，trainer 必须显式收集；现在通过 <code>extra_trainable_parameters()</code> 处理。</p>
+        </div>
+        <div class="card">
+          <h3><span class="tag amber">6</span>MeanFlow JVP 被有限差分替代</h3>
+          <p>当前实现不是论文严格形式；finite difference target 很可能是 collapse 的主因之一。</p>
+        </div>
+        <div class="card">
+          <h3><span class="tag blue">7</span>短训练不能代表论文方法</h3>
+          <p>Shortcut/MeanFlow 论文都不是“在强 release checkpoint 上训 2k steps”这么简单，短 pilot 只能判断当前实现是否有希望。</p>
+        </div>
+        <div class="card">
+          <h3><span class="tag blue">8</span>quick subset 不能替代 full eval</h3>
+          <p>RoboTwin quick clean20 适合方向筛选；最终结论仍要扩大任务数和 episodes。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="sources">
+      <h2>出处与代码索引</h2>
+      <h3>论文与官方资源</h3>
+      <ul>
+        <li>
+          Fast-WAM: <a href="https://arxiv.org/abs/2603.16666">Fast-WAM: Do World Action Models Need Test-time Future Imagination?</a>；
+          官方 checkpoint: <a href="https://huggingface.co/yuanty/fastwam">yuanty/fastwam</a>。
+        </li>
+        <li>
+          Flow Matching: <a href="https://arxiv.org/abs/2210.02747">Flow Matching for Generative Modeling</a>。
+        </li>
+        <li>
+          Shortcut Models: <a href="https://arxiv.org/abs/2410.12557">One Step Diffusion via Shortcut Models</a>；
+          官方代码: <a href="https://github.com/kvfrans/shortcut-models">kvfrans/shortcut-models</a>，
+          target 构造参考 <a href="https://raw.githubusercontent.com/kvfrans/shortcut-models/main/targets_shortcut.py">targets_shortcut.py</a>。
+        </li>
+        <li>
+          MeanFlow: <a href="https://arxiv.org/abs/2505.13447">Mean Flows for One-step Generative Modeling</a>；
+          官方代码: <a href="https://github.com/Gsunshine/meanflow">Gsunshine/meanflow</a>，
+          JVP loss 参考 <a href="https://raw.githubusercontent.com/Gsunshine/meanflow/main/meanflow.py">meanflow.py</a>。
+        </li>
+      </ul>
+
+      <h3>本仓库关键实现</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>模块</th>
+            <th>路径</th>
+            <th>作用</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>FastWAM baseline loss</td>
+            <td class="path"><a href="../../src/fastwam/models/wan22/fastwam.py">src/fastwam/models/wan22/fastwam.py</a></td>
+            <td>video/action flow matching training loss</td>
+          </tr>
+          <tr>
+            <td>连续 scheduler</td>
+            <td class="path"><a href="../../src/fastwam/models/wan22/schedulers/scheduler_continuous.py">src/fastwam/models/wan22/schedulers/scheduler_continuous.py</a></td>
+            <td><code>x_sigma</code> 构造、target、Euler step</td>
+          </tr>
+          <tr>
+            <td>Endpoint one-step</td>
+            <td class="path"><a href="../../src/fastwam/models/wan22/fastwam_one_step_action.py">src/fastwam/models/wan22/fastwam_one_step_action.py</a></td>
+            <td>固定最大 timestep 的 endpoint/velocity loss</td>
+          </tr>
+          <tr>
+            <td>Shortcut 旧版</td>
+            <td class="path"><a href="../../src/fastwam/models/wan22/fastwam_one_step_shortcut.py">src/fastwam/models/wan22/fastwam_one_step_shortcut.py</a></td>
+            <td>固定一步 + 半步一致性 loss</td>
+          </tr>
+          <tr>
+            <td>Shortcut official-style</td>
+            <td class="path"><a href="../../src/fastwam/models/wan22/fastwam_one_step_shortcut_official.py">src/fastwam/models/wan22/fastwam_one_step_shortcut_official.py</a></td>
+            <td>dt_base conditioning + flow/bootstrap target</td>
+          </tr>
+          <tr>
+            <td>MeanFlow 当前实现</td>
+            <td class="path"><a href="../../src/fastwam/models/wan22/fastwam_one_step_meanflow.py">src/fastwam/models/wan22/fastwam_one_step_meanflow.py</a></td>
+            <td>finite-difference meanflow target</td>
+          </tr>
+          <tr>
+            <td>Trainer 参数收集</td>
+            <td class="path"><a href="../../src/fastwam/trainer.py">src/fastwam/trainer.py</a></td>
+            <td>通过 <code>extra_trainable_parameters()</code> 收集新增 conditioner 参数</td>
+          </tr>
+          <tr>
+            <td>Shortcut official-style 配置</td>
+            <td class="path"><a href="../../configs/model/fastwam_one_step_shortcut_official.yaml">configs/model/fastwam_one_step_shortcut_official.yaml</a></td>
+            <td><code>num_denoise_steps=128</code>、<code>bootstrap_ratio=0.75</code></td>
+          </tr>
+          <tr>
+            <td>MeanFlow 配置</td>
+            <td class="path"><a href="../../configs/model/fastwam_one_step_meanflow.yaml">configs/model/fastwam_one_step_meanflow.yaml</a></td>
+            <td><code>start_timestep=0</code>、<code>derivative_epsilon=0.05</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>建议的下一步判断标准</h3>
+      <ol>
+        <li>任何新 one-step 方法都先和同一 checkpoint 的 <code>release_1</code> 比，而不是只和 <code>release_10</code> 比。</li>
+        <li>LIBERO full average 因 release_1 已接近饱和，更适合验证“不退化”；要看 one-step 空间，优先用 <code>libero_long_horizon_v1</code> 或官方 <code>libero_long_official</code>。</li>
+        <li>RoboTwin quick 更适合初筛“有没有提升空间”，但最终仍要扩大任务数和 episodes。</li>
+        <li>MeanFlow 若继续，应先修成论文 JVP + 随机 <code>r,t</code>，再做训练；否则当前 collapse 结果缺少可解释性。</li>
+        <li>Shortcut 若继续，应优先用 official-style 目标，并在长程/困难 eval 集上同时报告 release_1、method_1、release_10。</li>
+      </ol>
+    </section>
+  </div>
+</body>
+</html>

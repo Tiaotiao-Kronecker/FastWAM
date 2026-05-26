@@ -1,0 +1,1800 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FastWAM 算法过程、公式与源码映射 - No CDN</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --panel-soft: #eef3f7;
+      --ink: #15202b;
+      --muted: #5d6b78;
+      --line: #d9e1e8;
+      --blue: #245a8d;
+      --green: #26735f;
+      --red: #9d3b3b;
+      --amber: #8a641d;
+      --code-bg: #101820;
+      --code-ink: #e8eef3;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
+      line-height: 1.62;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 28px 20px;
+      border-right: 1px solid var(--line);
+      background: #ffffff;
+      overflow: auto;
+    }
+
+    nav h2 {
+      margin: 0 0 14px;
+      font-size: 18px;
+    }
+
+    nav a {
+      display: block;
+      padding: 7px 8px;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    nav a:hover {
+      background: var(--panel-soft);
+      color: var(--blue);
+    }
+
+    main {
+      width: min(1180px, 100%);
+      padding: 36px 34px 80px;
+    }
+
+    header {
+      margin-bottom: 28px;
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 34px 0 14px;
+      font-size: 26px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 22px 0 10px;
+      font-size: 19px;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 10px 0;
+    }
+
+    .lead {
+      max-width: 920px;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .tag {
+      padding: 4px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: #fbfcfe;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    section {
+      margin: 22px 0;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    .card {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+
+    .formula-card {
+      margin: 16px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #ffffff;
+    }
+
+    .formula-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #f2f6f9;
+    }
+
+    .formula-head strong {
+      font-size: 15px;
+    }
+
+    .source {
+      color: var(--blue);
+      font-size: 13px;
+      text-align: right;
+      text-decoration: none;
+    }
+
+    .source:hover {
+      text-decoration: underline;
+    }
+
+    .formula-body {
+      padding: 12px 14px 14px;
+    }
+
+    .formula-note {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .mini-title {
+      margin: 14px 0 6px;
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .param-list {
+      display: grid;
+      grid-template-columns: minmax(120px, 220px) minmax(0, 1fr);
+      gap: 6px 12px;
+      margin: 10px 0 4px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fbfcfe;
+      font-size: 14px;
+    }
+
+    .param-list dt {
+      margin: 0;
+      color: var(--blue);
+      font-weight: 700;
+    }
+
+    .param-list dd {
+      margin: 0;
+      color: var(--ink);
+    }
+
+    .code-map {
+      display: grid;
+      grid-template-columns: minmax(140px, 240px) minmax(0, 1fr);
+      gap: 6px 10px;
+      margin: 10px 0;
+      padding: 10px 12px;
+      border-left: 4px solid var(--green);
+      background: #edf7f3;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    .code-map dt {
+      margin: 0;
+      font-weight: 700;
+      color: var(--green);
+    }
+
+    .code-map dd {
+      margin: 0;
+    }
+
+    pre {
+      margin: 12px 0 0;
+      padding: 14px;
+      border-radius: 7px;
+      background: var(--code-bg);
+      color: var(--code-ink);
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.5;
+      tab-size: 2;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      background: #f2f6f9;
+      text-align: left;
+    }
+
+    .diagram-wrap {
+      margin-top: 16px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+      overflow-x: auto;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin-right: 5px;
+      border-radius: 50%;
+      vertical-align: -1px;
+    }
+
+    .blue { background: var(--blue); }
+    .green { background: var(--green); }
+    .red { background: var(--red); }
+    .amber { background: var(--amber); }
+
+    .callout {
+      padding: 14px 16px;
+      border-left: 4px solid var(--blue);
+      background: #eef5fb;
+      border-radius: 6px;
+      color: #23384c;
+    }
+
+    .warn {
+      border-left-color: var(--amber);
+      background: #fbf6e8;
+      color: #4a3b19;
+    }
+
+    ul {
+      padding-left: 22px;
+    }
+
+    @media (max-width: 980px) {
+      .layout {
+        display: block;
+      }
+
+      nav {
+        position: relative;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      main {
+        padding: 24px 16px 60px;
+      }
+
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+
+      .param-list,
+      .code-map {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav aria-label="页面导航">
+      <h2>FastWAM 算法页</h2>
+      <a href="#overview">1. 总览</a>
+      <a href="#symbols">2. 符号与张量</a>
+      <a href="#data">3. 数据处理</a>
+      <a href="#context">4. 条件 context</a>
+      <a href="#flow">5. Flow matching</a>
+      <a href="#experts">6. Video/Action Expert</a>
+      <a href="#attention">7. MoT 与 Cross Attention</a>
+      <a href="#loss">8. 训练 Loss</a>
+      <a href="#inference">9. 推理动作生成</a>
+      <a href="#zipmotion">10. 接入 ZipMotion 的位置</a>
+      <a href="#source-index">11. 源码索引</a>
+    </nav>
+
+    <main>
+      <header>
+        <h1>FastWAM 算法过程、数学公式与源码映射</h1>
+        <p class="lead">
+          本页把当前仓库里的 FastWAM 实现拆成完整数据流：多相机视频和机器人状态如何进入模型，
+          video/action 两个专家如何通过 MoT 交互，cross attention 如何读取文本和 proprio 条件，
+          训练时如何构造 flow-matching 目标，推理时如何从当前帧生成动作序列。
+        </p>
+        <p class="callout warn">
+          这是无 CDN 版本，不加载 MathJax，也不运行外部脚本。公式会以 LaTeX 原文显示，适合 VS Code Remote / Live Preview 加载外部脚本失败时阅读。
+        </p>
+        <div class="meta">
+          <span class="tag">源码根目录：src/fastwam</span>
+          <span class="tag">模型：Wan2.2 Video Expert + ActionDiT + MoT</span>
+          <span class="tag">生成日期：2026-05-13</span>
+        </div>
+      </header>
+
+      <section id="overview">
+        <h2>1. 总览</h2>
+        <p>
+          FastWAM 在这个仓库里可以理解为一个双专家 flow-matching 模型：
+          <strong>Video Expert</strong> 负责在 VAE latent 空间预测视频 flow，
+          <strong>Action Expert</strong> 负责在 action 空间预测动作 flow，
+          <strong>MoT</strong> 负责把 video tokens 和 action tokens 放进同一个 attention 通道里交互。
+        </p>
+        <p>
+          关键点是：图像本身不是 cross attention 的 context。当前实现中，图像先经 VAE 和 VideoDiT 变成 video tokens；
+          文本指令和 proprio 被组织成 context tokens，被 video/action 两个专家通过 cross attention 读取。
+        </p>
+
+        <div class="diagram-wrap" aria-label="FastWAM 数据流示意图">
+          <svg width="1120" height="530" viewBox="0 0 1120 530" role="img">
+            <defs>
+              <marker id="arrow-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#245a8d"></path>
+              </marker>
+              <marker id="arrow-green" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#26735f"></path>
+              </marker>
+              <marker id="arrow-red" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#9d3b3b"></path>
+              </marker>
+              <marker id="arrow-amber" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#8a641d"></path>
+              </marker>
+              <style>
+                .box { fill: #ffffff; stroke: #d9e1e8; stroke-width: 1.5; rx: 8; }
+                .box-blue { fill: #eef5fb; stroke: #9ebbd4; stroke-width: 1.5; rx: 8; }
+                .box-green { fill: #edf7f3; stroke: #8abbaa; stroke-width: 1.5; rx: 8; }
+                .box-red { fill: #fbefef; stroke: #d4a0a0; stroke-width: 1.5; rx: 8; }
+                .box-amber { fill: #fbf6e8; stroke: #d4bd7d; stroke-width: 1.5; rx: 8; }
+                .label { font: 600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; fill: #15202b; }
+                .small { font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; fill: #5d6b78; }
+                .arrow-blue { stroke: #245a8d; stroke-width: 2.2; fill: none; marker-end: url(#arrow-blue); }
+                .arrow-green { stroke: #26735f; stroke-width: 2.2; fill: none; marker-end: url(#arrow-green); }
+                .arrow-red { stroke: #9d3b3b; stroke-width: 2.2; fill: none; marker-end: url(#arrow-red); }
+                .arrow-amber { stroke: #8a641d; stroke-width: 2.2; fill: none; marker-end: url(#arrow-amber); }
+              </style>
+            </defs>
+
+            <rect class="box-blue" x="24" y="42" width="170" height="74"></rect>
+            <text class="label" x="42" y="72">多相机视频</text>
+            <text class="small" x="42" y="96">[Ncam,T,C,H,W]</text>
+
+            <rect class="box-blue" x="240" y="42" width="190" height="74"></rect>
+            <text class="label" x="258" y="72">拼接/resize/normalize</text>
+            <text class="small" x="258" y="96">video: [B,3,T,H,W]</text>
+
+            <rect class="box-blue" x="476" y="42" width="155" height="74"></rect>
+            <text class="label" x="494" y="72">Wan VAE</text>
+            <text class="small" x="494" y="96">z0: [B,48,F,h,w]</text>
+
+            <rect class="box-blue" x="684" y="42" width="170" height="74"></rect>
+            <text class="label" x="702" y="72">Video noising</text>
+            <text class="small" x="702" y="96">z_sigma, target</text>
+
+            <rect class="box-blue" x="908" y="42" width="170" height="74"></rect>
+            <text class="label" x="926" y="72">Video Expert</text>
+            <text class="small" x="926" y="96">video tokens</text>
+
+            <rect class="box-red" x="24" y="214" width="170" height="74"></rect>
+            <text class="label" x="42" y="244">动作序列</text>
+            <text class="small" x="42" y="268">a0: [B,Ta,Da]</text>
+
+            <rect class="box-red" x="240" y="214" width="190" height="74"></rect>
+            <text class="label" x="258" y="244">Action noising</text>
+            <text class="small" x="258" y="268">a_sigma, target</text>
+
+            <rect class="box-red" x="476" y="214" width="155" height="74"></rect>
+            <text class="label" x="494" y="244">Action Expert</text>
+            <text class="small" x="494" y="268">action tokens</text>
+
+            <rect class="box-amber" x="684" y="180" width="170" height="142"></rect>
+            <text class="label" x="702" y="214">MoT 混合注意力</text>
+            <text class="small" x="702" y="238">concat video/action</text>
+            <text class="small" x="702" y="260">masked self-attn</text>
+            <text class="small" x="702" y="282">split back to experts</text>
+
+            <rect class="box-green" x="908" y="180" width="170" height="142"></rect>
+            <text class="label" x="926" y="214">Cross Attention</text>
+            <text class="small" x="926" y="238">Q: expert tokens</text>
+            <text class="small" x="926" y="260">K/V: context tokens</text>
+            <text class="small" x="926" y="282">text + proprio</text>
+
+            <rect class="box-green" x="24" y="388" width="170" height="74"></rect>
+            <text class="label" x="42" y="418">任务文本</text>
+            <text class="small" x="42" y="442">instruction</text>
+
+            <rect class="box-green" x="240" y="388" width="190" height="74"></rect>
+            <text class="label" x="258" y="418">T5/Wan context cache</text>
+            <text class="small" x="258" y="442">Ctxt: [B,L,4096]</text>
+
+            <rect class="box-green" x="476" y="388" width="155" height="74"></rect>
+            <text class="label" x="494" y="418">Proprio token</text>
+            <text class="small" x="494" y="442">[B,1,4096]</text>
+
+            <rect class="box" x="684" y="388" width="170" height="74"></rect>
+            <text class="label" x="702" y="418">Heads</text>
+            <text class="small" x="702" y="442">predict video/action flow</text>
+
+            <rect class="box" x="908" y="388" width="170" height="74"></rect>
+            <text class="label" x="926" y="418">Loss / Inference</text>
+            <text class="small" x="926" y="442">MSE 或 denoise step</text>
+
+            <path class="arrow-blue" d="M 194 79 L 240 79"></path>
+            <path class="arrow-blue" d="M 430 79 L 476 79"></path>
+            <path class="arrow-blue" d="M 631 79 L 684 79"></path>
+            <path class="arrow-blue" d="M 854 79 L 908 79"></path>
+            <path class="arrow-blue" d="M 993 116 C 993 142, 830 150, 791 180"></path>
+
+            <path class="arrow-red" d="M 194 251 L 240 251"></path>
+            <path class="arrow-red" d="M 430 251 L 476 251"></path>
+            <path class="arrow-red" d="M 631 251 L 684 251"></path>
+
+            <path class="arrow-amber" d="M 854 251 L 908 251"></path>
+            <path class="arrow-amber" d="M 769 322 L 769 388"></path>
+            <path class="arrow-amber" d="M 854 425 L 908 425"></path>
+
+            <path class="arrow-green" d="M 194 425 L 240 425"></path>
+            <path class="arrow-green" d="M 430 425 L 476 425"></path>
+            <path class="arrow-green" d="M 631 425 C 730 425, 805 350, 908 286"></path>
+            <path class="arrow-green" d="M 430 425 C 596 382, 760 335, 908 265"></path>
+            <path class="arrow-green" d="M 993 322 L 993 388"></path>
+          </svg>
+          <div class="legend">
+            <span><span class="dot blue"></span>视频路径</span>
+            <span><span class="dot red"></span>动作路径</span>
+            <span><span class="dot green"></span>条件 context 路径</span>
+            <span><span class="dot amber"></span>专家交互路径</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="symbols">
+        <h2>2. 符号与张量</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>符号</th>
+              <th>含义</th>
+              <th>典型形状</th>
+              <th>来源</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>\(B\)</td>
+              <td>batch size</td>
+              <td>训练时可大于 1，动作推理时通常为 1</td>
+              <td>DataLoader / infer_action</td>
+            </tr>
+            <tr>
+              <td>\(V\)</td>
+              <td>归一化视频</td>
+              <td>\([B,3,T,H,W]\)</td>
+              <td>dataset 输出 <code>sample["video"]</code></td>
+            </tr>
+            <tr>
+              <td>\(Z_0\)</td>
+              <td>VAE latent video</td>
+              <td>\([B,48,F,h,w]\)</td>
+              <td>Wan VAE encode</td>
+            </tr>
+            <tr>
+              <td>\(A_0\)</td>
+              <td>真实动作序列</td>
+              <td>\([B,T_a,d_a]\)</td>
+              <td>dataset 输出 <code>sample["action"]</code></td>
+            </tr>
+            <tr>
+              <td>\(C\)</td>
+              <td>条件 context，含文本和可选 proprio</td>
+              <td>\([B,L,4096]\) 或 \([B,L+1,4096]\)</td>
+              <td>T5/Wan cache + proprio encoder</td>
+            </tr>
+            <tr>
+              <td>\(X_v, X_a\)</td>
+              <td>Video/Action expert token</td>
+              <td>\(X_v:[B,S_v,3072]\)，\(X_a:[B,T_a,1024]\)</td>
+              <td>pre_dit</td>
+            </tr>
+            <tr>
+              <td>\(H, d_h\)</td>
+              <td>attention head 数和每头维度</td>
+              <td>\(H=24,d_h=128\)</td>
+              <td><code>configs/model/fastwam.yaml</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout">
+          注意：Action Expert 的 residual hidden dim 是 1024，但 attention 内部维度是 \(H d_h=24\times128=3072\)。
+          这是通过 <code>Linear(1024,3072)</code> 的可学习投影完成的，attention 后再用 <code>Linear(3072,1024)</code> 投回主干维度。
+        </div>
+
+        <h3>公式阅读约定</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>记号</th>
+              <th>详细含义</th>
+              <th>代码变量或配置</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>\(T\), \(T_v\), \(T_a\)</td>
+              <td>\(T\) 是原始观测帧数；\(T_v\) 是抽样后送入模型的视频帧数；\(T_a\) 是动作 horizon。训练要求 action horizon 能被视频 transition 数 \(T_v-1\) 整除。</td>
+              <td><code>num_frames</code>, <code>T_video</code>, <code>action_horizon</code></td>
+            </tr>
+            <tr>
+              <td>\(H_o,W_o\)</td>
+              <td>拼接、resize、crop 后送入 VAE 的图像高度和宽度。模型要求二者都是 16 的倍数。</td>
+              <td><code>height</code>, <code>width</code></td>
+            </tr>
+            <tr>
+              <td>\(F,h,w\)</td>
+              <td>VAE latent 的时间、高度、宽度维度；它们不是原始像素维度。VideoDiT patchify 后得到 \(F',h',w'\)。</td>
+              <td><code>input_latents.shape[2:]</code></td>
+            </tr>
+            <tr>
+              <td>\(D_v,D_a,D_c\)</td>
+              <td>Video Expert hidden dim、Action Expert hidden dim、原始 context dim。当前配置分别是 3072、1024、4096。</td>
+              <td><code>video_dit_config.hidden_dim</code>, <code>action_dit_config.hidden_dim</code>, <code>text_dim</code></td>
+            </tr>
+            <tr>
+              <td>\(S_v,S_a,L_c\)</td>
+              <td>video token 数、action token 数、context token 数。通常 \(S_a=T_a\)，\(L_c=L\) 或 \(L+1\) 或 \(L+1+L_m\)。</td>
+              <td><code>video_tokens.shape[1]</code>, <code>action_tokens.shape[1]</code>, <code>context.shape[1]</code></td>
+            </tr>
+            <tr>
+              <td>\(W,b\)</td>
+              <td>公式中的 \(W\) 和 \(b\) 都是可学习线性层参数，不是手工定义的常量。</td>
+              <td><code>nn.Linear(...)</code></td>
+            </tr>
+            <tr>
+              <td>\(\sigma,t,u,s\)</td>
+              <td>\(u\) 是均匀随机数；\(s\) 是 scheduler shift；\(\sigma\) 是连续噪声强度；\(t\) 是缩放到训练步数区间的 timestep。</td>
+              <td><code>u</code>, <code>shift</code>, <code>sigma</code>, <code>timestep</code></td>
+            </tr>
+            <tr>
+              <td>\(\epsilon\), \(v^\star\), \(\hat v\)</td>
+              <td>\(\epsilon\) 是高斯噪声；\(v^\star=\epsilon-X_0\) 是训练目标速度；\(\hat v\) 是模型预测速度。</td>
+              <td><code>noise_*</code>, <code>target_*</code>, <code>pred_*</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>源码变量名对照</h3>
+        <dl class="code-map">
+          <dt><code>input_latents</code></dt>
+          <dd>公式里的 \(Z_0\)，即 clean video latent。</dd>
+          <dt><code>latents</code></dt>
+          <dd>公式里的 \(Z_\sigma\)，即加噪 video latent。</dd>
+          <dt><code>action</code></dt>
+          <dd>公式里的 \(A_0\)，即 clean action sequence。</dd>
+          <dt><code>noisy_action</code></dt>
+          <dd>公式里的 \(A_\sigma\)，即加噪 action sequence。</dd>
+          <dt><code>context</code></dt>
+          <dd>公式里的 \(C\)，即文本/proprio/motion 等条件 token 的集合。</dd>
+          <dt><code>tokens</code>, <code>x_tokens</code></dt>
+          <dd>公式里的 \(X_a\) 或 \(X_v\)，具体含义取决于当前 expert。</dd>
+          <dt><code>context_mask</code>, <code>attention_mask</code></dt>
+          <dd>布尔 mask；在 PyTorch <code>scaled_dot_product_attention</code> 里，<code>True</code> 表示允许 attention。</dd>
+        </dl>
+      </section>
+
+      <section id="data">
+        <h2>3. 数据处理</h2>
+        <p>
+          训练样本首先由 LeRobot 风格数据集读出多相机图像、动作、状态和任务文本。
+          当前 FastWAM 的多相机进入方式是<strong>像素级画布拼接</strong>，不是多相机 token cross attention。
+        </p>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F1. 多相机视频拼接</strong>
+            <a class="source" href="../src/fastwam/datasets/lerobot/robot_video_dataset.py">robot_video_dataset.py:142-197</a>
+          </div>
+          <div class="formula-body">
+            \[
+            I \in \mathbb{R}^{N_c \times T \times 3 \times H \times W}
+            \quad\Longrightarrow\quad
+            V \in [-1,1]^{3 \times T_v \times H_o \times W_o}
+            \]
+            <p class="formula-note">
+              对 RobotWin 三相机，top 相机被 resize 到 \(256\times320\)，左右 wrist 相机被 resize 到 \(128\times160\)，
+              左右 wrist 横向拼接后再和 top 纵向拼接，得到 \(384\times320\) 的画布。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(I\)</dt>
+              <dd>processor 输出的多相机图像张量，对应 <code>sample["pixel_values"]</code>。</dd>
+              <dt>\(N_c\)</dt>
+              <dd>相机数量；RobotWin 模式要求正好 3 个相机。</dd>
+              <dt>\(T\), \(T_v\)</dt>
+              <dd>\(T\) 是原始观测窗口帧数，\(T_v\) 是 <code>video_sample_indices</code> 抽样后的帧数。</dd>
+              <dt>\(H_o,W_o\)</dt>
+              <dd>最终送入 VAE 的画布尺寸，由拼接、resize、crop 后决定。</dd>
+              <dt>\([-1,1]\)</dt>
+              <dd>图像归一化范围，来自 <code>normalize_transform</code>。</dd>
+            </dl>
+            <pre><code>video = sample["pixel_values"]  # [num_cameras, T, C, H, W]
+cam_top = resize(video[0], size=[256, 320])
+cam_left = resize(video[1], size=[128, 160])
+cam_right = resize(video[2], size=[128, 160])
+bottom = torch.cat([cam_left, cam_right], dim=-1)
+video = torch.cat([cam_top, bottom], dim=-2)
+video = self.normalize_transform(video)
+video = video.permute(1, 0, 2, 3)  # [C, T, H, W]</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F2. 动作和 proprio 对齐</strong>
+            <a class="source" href="../src/fastwam/datasets/lerobot/robot_video_dataset.py">robot_video_dataset.py:199-203</a>
+          </div>
+          <div class="formula-body">
+            \[
+            A_0 = \{a_0,\ldots,a_{T_a-1}\},\qquad
+            P = \{p_0,\ldots,p_{T_a-1}\}
+            \]
+            <p class="formula-note">
+              数据注释里写明 action 从 \(t_0\) 开始但少最后一帧，proprio 原始长度和视频帧对齐。
+              当前代码使用 <code>proprio[:-1]</code> 让 proprio 与 action 对齐。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(A_0\)</dt>
+              <dd>clean action sequence，是 flow matching 的动作训练目标基础。</dd>
+              <dt>\(a_\tau\)</dt>
+              <dd>第 \(\tau\) 个动作向量，维度是 \(d_a=\)<code>action_dim</code>。</dd>
+              <dt>\(P\)</dt>
+              <dd>与动作时间步对齐后的 proprio 序列。</dd>
+              <dt>\(p_\tau\)</dt>
+              <dd>第 \(\tau\) 个机器人状态向量，维度是 <code>proprio_dim</code>。</dd>
+              <dt>\(T_a\)</dt>
+              <dd>动作 horizon，也就是 <code>action.shape[1]</code>。</dd>
+            </dl>
+            <pre><code>action = sample["action"]         # [T-1, action_dim]
+proprio = sample["proprio"][:-1]  # [T-1, state_dim]</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="context">
+        <h2>4. 条件 Context</h2>
+        <p>
+          FastWAM 的 cross attention 读取的 context 主要来自两类信息：任务文本 embedding 和可选 proprio token。
+          文本 embedding 当前通常是离线预计算的 Wan/T5 context cache。
+        </p>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F3. 文本 context cache</strong>
+            <a class="source" href="../src/fastwam/datasets/lerobot/robot_video_dataset.py">robot_video_dataset.py:218-268</a>
+          </div>
+          <div class="formula-body">
+            \[
+            C_{\text{text}} = E_{\text{text}}(\text{instruction})
+            \in \mathbb{R}^{L \times 4096}
+            \]
+            <p class="formula-note">
+              dataset 根据 prompt 的 hash 读取预计算文件，返回 <code>context</code> 和 <code>context_mask</code>。
+              之后把无效 token 置零，并把 mask 设成全 1，以保持和 Wan2.2 行为一致。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(C_{\text{text}}\)</dt>
+              <dd>文本编码器输出的 token 序列；每个 token 是 4096 维。</dd>
+              <dt>\(E_{\text{text}}\)</dt>
+              <dd>Wan/T5 文本编码器；训练时通常不在线运行，而是读取 cache。</dd>
+              <dt>\(L\)</dt>
+              <dd>文本 token 长度，当前配置常用 <code>context_len=128</code>。</dd>
+              <dt><code>context_mask</code></dt>
+              <dd>标记哪些 context token 有效；当前 dataset 为兼容 Wan 行为把它设成全 True。</dd>
+            </dl>
+            <pre><code>context, context_mask = self._get_cached_text_context(instruction)
+context[~context_mask] = 0.0
+context_mask = torch.ones_like(context_mask)</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F4. Proprio 作为额外 context token</strong>
+            <a class="source" href="../src/fastwam/models/wan22/fastwam.py">fastwam.py:219-240</a>
+          </div>
+          <div class="formula-body">
+            \[
+            c_p = W_p p_0 + b_p \in \mathbb{R}^{4096}
+            \]
+            \[
+            C = \operatorname{Concat}(C_{\text{text}}, c_p)
+            \in \mathbb{R}^{B \times (L+1) \times 4096}
+            \]
+            <p class="formula-note">
+              训练时当前实现只取 episode 当前窗口的第一步 proprio：<code>proprio = proprio[:, 0, :]</code>。
+              这意味着 proprio 是当前状态条件，而不是整段 proprio 序列条件。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(p_0\)</dt>
+              <dd>当前观测窗口第一步 proprio，对应训练代码里的 <code>proprio[:, 0, :]</code>。</dd>
+              <dt>\(W_p,b_p\)</dt>
+              <dd><code>proprio_encoder</code> 的权重和偏置；代码中是 <code>nn.Linear(proprio_dim, text_dim)</code>。</dd>
+              <dt>\(c_p\)</dt>
+              <dd>proprio 被投影后的单个 context token，形状是 \([B,1,4096]\)。</dd>
+              <dt>\(C\)</dt>
+              <dd>拼接后的条件 token；之后会分别进入 Video Expert 和 Action Expert 的 <code>text_embedding</code> MLP。</dd>
+            </dl>
+            <pre><code>self.proprio_encoder = nn.Linear(self.proprio_dim, self.text_dim)
+proprio_token = self.proprio_encoder(proprio.unsqueeze(1))  # [B, 1, D]
+context = torch.cat([context, proprio_token], dim=1)
+context_mask = torch.cat([context_mask, proprio_mask], dim=1)</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="flow">
+        <h2>5. Flow Matching 噪声路径</h2>
+        <p>
+          FastWAM 对 video latent 和 action 都使用同一种 continuous flow-matching scheduler。
+          训练时从 clean sample 和高斯噪声之间采样一个中间点，模型学习从 clean 指向 noise 的速度场。
+          推理时从噪声出发，沿着相反方向积分回 clean action 或 video。
+        </p>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F5. shift 后的时间采样</strong>
+            <a class="source" href="../src/fastwam/models/wan22/schedulers/scheduler_continuous.py">scheduler_continuous.py:17-37</a>
+          </div>
+          <div class="formula-body">
+            \[
+            u \sim \mathcal{U}(0,1),\qquad
+            \sigma = \phi(u;s)=\frac{s u}{1+(s-1)u},\qquad
+            t = N_{\text{steps}}\sigma
+            \]
+            <p class="formula-note">
+              <code>shift</code> 控制训练和推理的噪声时间分布。配置里 video/action 默认 shift 都是 5.0。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(u\)</dt>
+              <dd>从 \([0,1]\) 均匀采样的随机数，每个 batch 样本一个。</dd>
+              <dt>\(s\)</dt>
+              <dd>scheduler shift，控制采样更偏向高噪声还是低噪声区域。</dd>
+              <dt>\(\phi(u;s)\)</dt>
+              <dd>shift 变换函数，把均匀分布的 \(u\) 映射为噪声强度 \(\sigma\)。</dd>
+              <dt>\(N_{\text{steps}}\)</dt>
+              <dd>训练 timestep 总数，默认 1000。</dd>
+              <dt>\(t\)</dt>
+              <dd>传入模型 time embedding 的 timestep，等于 \(\sigma\) 乘以训练步数。</dd>
+            </dl>
+            <pre><code>u = torch.rand((batch_size,), device=device, dtype=torch.float32)
+sigma = self._phi(u, self.shift)
+timestep = sigma * float(self.num_train_timesteps)</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F6. 加噪样本和训练目标</strong>
+            <a class="source" href="../src/fastwam/models/wan22/schedulers/scheduler_continuous.py">scheduler_continuous.py:49-61</a>
+          </div>
+          <div class="formula-body">
+            \[
+            X_{\sigma} = (1-\sigma)X_0+\sigma\epsilon,\qquad
+            v^\star = \epsilon-X_0
+            \]
+            <p class="formula-note">
+              对 video，\(X_0=Z_0\)。对 action，\(X_0=A_0\)。
+              模型输出 \(\hat v_\theta(X_\sigma,t,C)\)，训练时用 MSE 拟合 \(v^\star\)。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(X_0\)</dt>
+              <dd>clean sample；可以是 clean video latent \(Z_0\)，也可以是 clean action \(A_0\)。</dd>
+              <dt>\(\epsilon\)</dt>
+              <dd>与 \(X_0\) 同形状的标准高斯噪声，对应 <code>torch.randn_like(...)</code>。</dd>
+              <dt>\(X_\sigma\)</dt>
+              <dd>线性插值得到的加噪样本，是模型实际输入。</dd>
+              <dt>\(v^\star\)</dt>
+              <dd>训练监督目标，表示从 clean sample 指向 noise 的速度。</dd>
+              <dt>\(\hat v_\theta\)</dt>
+              <dd>模型预测的速度场；video/action 两个分支各预测自己的速度。</dd>
+            </dl>
+            <pre><code>return (1 - sigma) * original_samples + sigma * noise
+
+@staticmethod
+def training_target(sample, noise, timestep):
+    return noise - sample</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F7. 训练中 video/action 的实际加噪</strong>
+            <a class="source" href="../src/fastwam/models/wan22/fastwam.py">fastwam.py:448-477</a>
+          </div>
+          <div class="formula-body">
+            \[
+            Z_\sigma=(1-\sigma_v)Z_0+\sigma_v\epsilon_v,\qquad
+            A_\sigma=(1-\sigma_a)A_0+\sigma_a\epsilon_a
+            \]
+            \[
+            v_v^\star=\epsilon_v-Z_0,\qquad
+            v_a^\star=\epsilon_a-A_0
+            \]
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(Z_0,Z_\sigma\)</dt>
+              <dd>clean video latent 和加噪 video latent，对应 <code>input_latents</code> 与 <code>latents</code>。</dd>
+              <dt>\(A_0,A_\sigma\)</dt>
+              <dd>clean action 和加噪 action，对应 <code>action</code> 与 <code>noisy_action</code>。</dd>
+              <dt>\(\sigma_v,\sigma_a\)</dt>
+              <dd>video 和 action 各自采样的噪声强度；两者可以不同。</dd>
+              <dt>\(\epsilon_v,\epsilon_a\)</dt>
+              <dd>video latent 空间和 action 空间各自的高斯噪声。</dd>
+              <dt>\(v_v^\star,v_a^\star\)</dt>
+              <dd>video flow target 和 action flow target，对应 <code>target_video</code> 与 <code>target_action</code>。</dd>
+            </dl>
+            <pre><code>noise_video = torch.randn_like(input_latents)
+timestep_video = self.train_video_scheduler.sample_training_t(...)
+latents = self.train_video_scheduler.add_noise(input_latents, noise_video, timestep_video)
+target_video = self.train_video_scheduler.training_target(input_latents, noise_video, timestep_video)
+
+noise_action = torch.randn_like(action)
+timestep_action = self.train_action_scheduler.sample_training_t(...)
+noisy_action = self.train_action_scheduler.add_noise(action, noise_action, timestep_action)
+target_action = self.train_action_scheduler.training_target(action, noise_action, timestep_action)</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F8. 首帧 causal 条件</strong>
+            <a class="source" href="../src/fastwam/models/wan22/fastwam.py">fastwam.py:340-468</a>
+          </div>
+          <div class="formula-body">
+            \[
+            Z_\sigma[:, :, 0] \leftarrow Z_0[:, :, 0]
+            \]
+            <p class="formula-note">
+              当 <code>fuse_vae_embedding_in_latents=True</code> 时，训练会把第一帧 latent 保持为 clean first-frame latent。
+              后续 video loss 也会排除这个首帧 latent，让模型预测未来 latent 的 flow。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(Z_\sigma[:, :, 0]\)</dt>
+              <dd>加噪 video latent 的第 0 个 latent frame。</dd>
+              <dt>\(Z_0[:, :, 0]\)</dt>
+              <dd>clean first-frame latent，来自输入视频第一帧。</dd>
+              <dt>\(\leftarrow\)</dt>
+              <dd>赋值操作，不是可学习运算；代码直接覆盖第 0 帧 latent。</dd>
+              <dt>作用</dt>
+              <dd>让模型在训练和推理时都以当前观测帧为条件预测未来，而不是重建当前帧。</dd>
+            </dl>
+            <pre><code>first_frame_latents = input_latents[:, :, 0:1]
+...
+if inputs["first_frame_latents"] is not None:
+    latents[:, :, 0:1] = inputs["first_frame_latents"]</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="experts">
+        <h2>6. Video Expert 与 Action Expert</h2>
+        <p>
+          两个 expert 都先把原始输入转成 transformer token。Video Expert 接收 VAE latent，
+          通过 3D patch embedding 得到时空 token；Action Expert 接收 noisy action，
+          通过线性层得到 action token。
+        </p>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F9. Video patchify</strong>
+            <a class="source" href="../src/fastwam/models/wan22/wan_video_dit.py">wan_video_dit.py:367-408, 555-600</a>
+          </div>
+          <div class="formula-body">
+            \[
+            \tilde Z = \operatorname{Conv3D}_{p_f,p_h,p_w}(Z_\sigma)
+            \in \mathbb{R}^{B \times D_v \times F' \times h' \times w'}
+            \]
+            \[
+            X_v = \operatorname{Flatten}_{F'h'w'}(\tilde Z)
+            \in \mathbb{R}^{B \times S_v \times D_v},\qquad S_v=F'h'w'
+            \]
+            <p class="formula-note">
+              当前配置中 \(D_v=3072\)，patch size 为 \([1,2,2]\)。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(Z_\sigma\)</dt>
+              <dd>加噪 video latent，形状 \([B,48,F,h,w]\)。</dd>
+              <dt>\(p_f,p_h,p_w\)</dt>
+              <dd>VideoDiT patch size；当前配置是 \([1,2,2]\)，即时间维不降采样，空间维每 \(2\times2\) 合成一个 token。</dd>
+              <dt>\(\tilde Z\)</dt>
+              <dd>3D 卷积 patch embedding 后的特征图。</dd>
+              <dt>\(D_v\)</dt>
+              <dd>Video Expert hidden dim，当前为 3072。</dd>
+              <dt>\(F',h',w'\)</dt>
+              <dd>patchify 后的 latent 网格尺寸；\(F'=F/p_f\)，\(h'=h/p_h\)，\(w'=w/p_w\)。</dd>
+              <dt>\(S_v\)</dt>
+              <dd>video token 总数，等于 \(F'h'w'\)。</dd>
+            </dl>
+            <pre><code>self.patch_embedding = nn.Conv3d(
+    in_dim, hidden_dim, kernel_size=patch_size, stride=patch_size)
+
+x = self.patchify(x)
+x_tokens = rearrange(x, "b c f h w -> b (f h w) c").contiguous()</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F10. Action token 化</strong>
+            <a class="source" href="../src/fastwam/models/wan22/action_dit.py">action_dit.py:74-85, 280-286</a>
+          </div>
+          <div class="formula-body">
+            \[
+            X_a = A_\sigma W_a + b_a
+            \in \mathbb{R}^{B \times T_a \times D_a}
+            \]
+            \[
+            C_a = \operatorname{MLP}_a(C)
+            \in \mathbb{R}^{B \times L_c \times D_a}
+            \]
+            <p class="formula-note">
+              当前配置中 \(D_a=1024\)，文本/proprio context 在进入 Action Expert 后也被投影到 1024 维。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(A_\sigma\)</dt>
+              <dd>加噪动作序列，形状 \([B,T_a,d_a]\)。</dd>
+              <dt>\(W_a,b_a\)</dt>
+              <dd><code>action_encoder</code> 的线性层参数，把动作维度 \(d_a\) 投到 \(D_a\)。</dd>
+              <dt>\(X_a\)</dt>
+              <dd>Action Expert 的 residual stream token，形状 \([B,T_a,D_a]\)。</dd>
+              <dt>\(C\)</dt>
+              <dd>原始 context，维度是 4096；包含文本 token 和可选 proprio token。</dd>
+              <dt>\(C_a\)</dt>
+              <dd>Action Expert 内部使用的 context embedding，维度被投影到 \(D_a=1024\)。</dd>
+              <dt>\(L_c\)</dt>
+              <dd>context token 数；加入 proprio 或 motion token 后会增加。</dd>
+            </dl>
+            <pre><code>self.action_encoder = nn.Linear(action_dim, hidden_dim)
+self.text_embedding = nn.Sequential(
+    nn.Linear(text_dim, hidden_dim),
+    nn.GELU(approximate="tanh"),
+    nn.Linear(hidden_dim, hidden_dim),
+)
+
+tokens = self.action_encoder(action_tokens)
+context_emb = self.text_embedding(context)</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F11. 时间调制参数</strong>
+            <a class="source" href="../src/fastwam/models/wan22/action_dit.py">action_dit.py:280-286</a>
+          </div>
+          <div class="formula-body">
+            \[
+            e_t = \operatorname{MLP}_{time}(\operatorname{SinCos}(t)),\qquad
+            m_t = \operatorname{MLP}_{proj}(e_t)
+            \]
+            \[
+            m_t \rightarrow
+            (\Delta_{\text{msa}}, S_{\text{msa}}, G_{\text{msa}},
+             \Delta_{\text{mlp}}, S_{\text{mlp}}, G_{\text{mlp}})
+            \]
+            <p class="formula-note">
+              每层 DiT block 都使用这 6 组调制量控制 self-attention 和 MLP 的残差分支。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(t\)</dt>
+              <dd>scheduler 采样得到的 timestep，video 和 action 分支各有自己的 timestep。</dd>
+              <dt>\(\operatorname{SinCos}(t)\)</dt>
+              <dd>一维正弦位置编码，把标量 timestep 转成 <code>freq_dim</code> 维向量。</dd>
+              <dt>\(e_t\)</dt>
+              <dd>time embedding MLP 输出，维度等于 expert hidden dim。</dd>
+              <dt>\(m_t\)</dt>
+              <dd>time projection 输出，会被拆成 6 份，每份都是 hidden dim。</dd>
+              <dt>\(\Delta,S,G\)</dt>
+              <dd>\(\Delta\) 是 shift，\(S\) 是 scale，\(G\) 是 residual gate；分别调制 MSA 和 MLP 两个分支。</dd>
+            </dl>
+            <pre><code>t = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, timestep))
+t_mod = self.time_projection(t).unflatten(1, (6, self.hidden_dim))</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="attention">
+        <h2>7. MoT 与 Cross Attention</h2>
+        <p>
+          FastWAM 的核心不是单个 transformer，而是每一层都同时处理 video expert 和 action expert。
+          MoT 先做 video/action token 的混合 self-attention，随后每个 expert 各自对 context 做 cross attention。
+        </p>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F12. DiT block 的调制输入</strong>
+            <a class="source" href="../src/fastwam/models/wan22/mot.py">mot.py:58-75, 163-172</a>
+          </div>
+          <div class="formula-body">
+            \[
+            U_e^\ell
+            =
+            \operatorname{LN}_1(X_e^\ell)\odot(1+S_{\text{msa},e})
+            +\Delta_{\text{msa},e}
+            \]
+            \[
+            Q_e^\ell=\operatorname{RoPE}(\operatorname{RMSNorm}(U_e^\ell W^Q_e)),
+            \quad
+            K_e^\ell=\operatorname{RoPE}(\operatorname{RMSNorm}(U_e^\ell W^K_e)),
+            \quad
+            V_e^\ell=U_e^\ell W^V_e
+            \]
+            <p class="formula-note">
+              这里 \(e\in\{\text{video},\text{action}\}\)。两个 expert 使用各自的 projection，但 head 数和 head dim 必须一致。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(e\)</dt>
+              <dd>expert 类型，取 video 或 action。</dd>
+              <dt>\(\ell\)</dt>
+              <dd>transformer block 层号；FastWAM 配置中两个 expert 都是 30 层。</dd>
+              <dt>\(X_e^\ell\)</dt>
+              <dd>第 \(\ell\) 层输入 token；video/action 各自有不同 hidden dim。</dd>
+              <dt>\(U_e^\ell\)</dt>
+              <dd>做 Q/K/V 投影前的调制后 token。</dd>
+              <dt>\(\operatorname{LN}_1\)</dt>
+              <dd>block 的第一个 LayerNorm，对应 <code>block.norm1</code>。</dd>
+              <dt>\(\odot\)</dt>
+              <dd>逐元素乘法，scale 和 gate 都是按 hidden dim 广播到所有 token。</dd>
+              <dt>\(W_e^Q,W_e^K,W_e^V\)</dt>
+              <dd>该 expert self-attention 的可学习 Q/K/V 线性投影。</dd>
+              <dt>\(\operatorname{RoPE}\)</dt>
+              <dd>旋转位置编码；video 使用 3D 时空 RoPE，action 使用 1D 时间 RoPE。</dd>
+            </dl>
+            <pre><code>shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = \
+    self._split_modulation(block, t_mod)
+attn_input = modulate(block.norm1(x), shift_msa, scale_msa)
+
+q = block.self_attn.norm_q(block.self_attn.q(attn_input))
+k = block.self_attn.norm_k(block.self_attn.k(attn_input))
+v = block.self_attn.v(attn_input)
+q = rope_apply(q, freqs, block.num_heads)
+k = rope_apply(k, freqs, block.num_heads)</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F13. MoT 混合 self-attention</strong>
+            <a class="source" href="../src/fastwam/models/wan22/mot.py">mot.py:518-553</a>
+          </div>
+          <div class="formula-body">
+            \[
+            Q=[Q_v;Q_a],\qquad K=[K_v;K_a],\qquad V=[V_v;V_a]
+            \]
+            \[
+            O=\operatorname{Attention}(Q,K,V;M_{\text{mot}})
+            =
+            \operatorname{Softmax}\left(\frac{QK^\top}{\sqrt{d_h}} + M_{\text{mot}}\right)V
+            \]
+            \[
+            O=[O_v;O_a]
+            \]
+            <p class="formula-note">
+              代码把两个 expert 的 Q/K/V 沿 sequence 维拼接，做一次 masked attention，再按原 sequence 长度切回 video/action。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\([Q_v;Q_a]\)</dt>
+              <dd>沿 token sequence 维拼接，不是特征维拼接。拼接后 sequence 长度是 \(S_v+S_a\)。</dd>
+              <dt>\(Q,K,V\)</dt>
+              <dd>拼接后的 mixed attention 输入，内部形状会 reshape 为 \([B,H,S,d_h]\)。</dd>
+              <dt>\(M_{\text{mot}}\)</dt>
+              <dd>video/action 之间的可见性 mask，决定哪些 query token 可以看哪些 key token。</dd>
+              <dt>\(O\)</dt>
+              <dd>混合 attention 输出，再按原 token 长度切分成 \(O_v\) 和 \(O_a\)。</dd>
+              <dt>\(d_h\)</dt>
+              <dd>每个 attention head 的维度，当前为 128。</dd>
+            </dl>
+            <pre><code>q_cat = torch.cat(q_chunks, dim=1)
+k_cat = torch.cat(k_chunks, dim=1)
+v_cat = torch.cat(v_chunks, dim=1)
+
+mixed = self._mixed_attention(
+    q_cat=q_cat, k_cat=k_cat, v_cat=v_cat, attention_mask=attention_mask)
+
+mixed_slice = mixed[:, start:end, :]
+updated_tokens = self._apply_post_with_optional_checkpoint(...)</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F14. MoT attention mask</strong>
+            <a class="source" href="../src/fastwam/models/wan22/fastwam.py">fastwam.py:385-407</a>
+          </div>
+          <div class="formula-body">
+            \[
+            M_{\text{mot}}=
+            \begin{bmatrix}
+            M_{v\rightarrow v} &amp; 0 \\
+            M_{a\rightarrow v_0} &amp; \mathbf{1}_{a\rightarrow a}
+            \end{bmatrix}
+            \]
+            <p class="formula-note">
+              当前 mask 让 action token 可以看 action token 和首帧 video token。
+              video token 不看 action token。首帧 causal video 模式下，首帧 video token 也不能看未来 video token。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(M_{v\rightarrow v}\)</dt>
+              <dd>video query 到 video key 的 mask；由 <code>build_video_to_video_mask</code> 构造。</dd>
+              <dt>\(0\)</dt>
+              <dd>右上角块，表示 video query 不能 attend 到 action key。</dd>
+              <dt>\(M_{a\rightarrow v_0}\)</dt>
+              <dd>action query 只能 attend 到首帧 video token，而不是未来 video token。</dd>
+              <dt>\(\mathbf{1}_{a\rightarrow a}\)</dt>
+              <dd>action query 可以 attend 到所有 action key。</dd>
+              <dt>布尔语义</dt>
+              <dd>在 PyTorch SDPA 里 <code>True</code> 表示允许 attention，<code>False</code> 表示屏蔽。</dd>
+            </dl>
+            <pre><code>mask = torch.zeros((total_seq_len, total_seq_len), dtype=torch.bool, device=device)
+mask[:video_seq_len, :video_seq_len] = self.video_expert.build_video_to_video_mask(...)
+mask[video_seq_len:, video_seq_len:] = True
+first_frame_tokens = min(video_tokens_per_frame, video_seq_len)
+mask[video_seq_len:, :first_frame_tokens] = True</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F15. self-attention 残差更新</strong>
+            <a class="source" href="../src/fastwam/models/wan22/mot.py">mot.py:99-122</a>
+          </div>
+          <div class="formula-body">
+            \[
+            \bar X_e^\ell
+            =
+            X_e^\ell + G_{\text{msa},e}\odot W^O_e O_e^\ell
+            \]
+            <p class="formula-note">
+              self-attention 分支带有 gate。这个 gate 来自 timestep modulation。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(\bar X_e^\ell\)</dt>
+              <dd>完成 mixed self-attention residual 后、cross attention 前的 token。</dd>
+              <dt>\(G_{\text{msa},e}\)</dt>
+              <dd>self-attention 分支 gate，来自时间调制参数。</dd>
+              <dt>\(W_e^O\)</dt>
+              <dd>self-attention 输出投影，对应 <code>block.self_attn.o</code>。</dd>
+              <dt>\(O_e^\ell\)</dt>
+              <dd>MoT mixed attention 输出中切回给当前 expert 的那一段。</dd>
+            </dl>
+            <pre><code>x = block.gate(residual_x, gate_msa, block.self_attn.o(mixed_attn_out))</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F16. Cross attention 的 Q/K/V</strong>
+            <a class="source" href="../src/fastwam/models/wan22/wan_video_dit.py">wan_video_dit.py:198-220</a>
+          </div>
+          <div class="formula-body">
+            \[
+            Q_c=\operatorname{RMSNorm}(\operatorname{LN}_3(\bar X_e^\ell)W^Q_c),
+            \quad
+            K_c=\operatorname{RMSNorm}(C_e W^K_c),
+            \quad
+            V_c=C_e W^V_c
+            \]
+            \[
+            Y_c=\operatorname{Softmax}\left(\frac{Q_cK_c^\top}{\sqrt{d_h}}+M_c\right)V_c
+            \]
+            \[
+            \tilde X_e^\ell = \bar X_e^\ell + W^O_cY_c
+            \]
+            <p class="formula-note">
+              对 Action Expert：\(\bar X_a^\ell\in\mathbb{R}^{B\times T_a\times1024}\)，
+              \(C_a\in\mathbb{R}^{B\times L_c\times1024}\)。
+              q/k/v 先投影到 \(24\times128=3072\)，再 reshape 成多头。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(Q_c\)</dt>
+              <dd>cross attention 的 query，来自当前 expert token；Action Expert 中来自动作 token。</dd>
+              <dt>\(K_c,V_c\)</dt>
+              <dd>cross attention 的 key/value，来自 context token；不是来自图像像素。</dd>
+              <dt>\(C_e\)</dt>
+              <dd>投影到当前 expert hidden dim 后的 context。video 分支是 \(C_v\)，action 分支是 \(C_a\)。</dd>
+              <dt>\(M_c\)</dt>
+              <dd>context mask，形状通常是 \([B,1,S_e,L_c]\)；控制每个 query 能看哪些 context token。</dd>
+              <dt>\(Y_c\)</dt>
+              <dd>从 context 读出的加权 value。</dd>
+              <dt>\(\tilde X_e^\ell\)</dt>
+              <dd>完成 cross attention residual 后、MLP 前的 token。</dd>
+              <dt>\(W_c^Q,W_c^K,W_c^V,W_c^O\)</dt>
+              <dd>cross attention 自己的 Q/K/V/O 可学习线性层，与 self-attention 的线性层不是同一组参数。</dd>
+            </dl>
+            <pre><code>self.q = nn.Linear(hidden_dim, self.attn_hidden_dim)
+self.k = nn.Linear(hidden_dim, self.attn_hidden_dim)
+self.v = nn.Linear(hidden_dim, self.attn_hidden_dim)
+self.o = nn.Linear(self.attn_hidden_dim, hidden_dim)
+
+q = self.norm_q(self.q(x))
+k = self.norm_k(self.k(ctx))
+v = self.v(ctx)
+x = flash_attention(q=q, k=k, v=v, num_heads=self.num_heads, ctx_mask=ctx_mask)
+return self.o(x)</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F17. 多头 attention reshape</strong>
+            <a class="source" href="../src/fastwam/models/wan22/wan_video_dit.py">wan_video_dit.py:14-21</a>
+          </div>
+          <div class="formula-body">
+            \[
+            Q_c\in\mathbb{R}^{B\times S\times (H d_h)}
+            \rightarrow
+            \mathbb{R}^{B\times H\times S\times d_h}
+            \]
+            <p class="formula-note">
+              这里 reshape 不改变数值，只把线性投影后的 3072 维拆成 24 个 128 维 head。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(S\)</dt>
+              <dd>query token 数；action cross attention 中 \(S=T_a\)，video cross attention 中 \(S=S_v\)。</dd>
+              <dt>\(H\)</dt>
+              <dd>attention head 数，当前为 24。</dd>
+              <dt>\(d_h\)</dt>
+              <dd>每个 head 的维度，当前为 128。</dd>
+              <dt>\(Hd_h\)</dt>
+              <dd>attention 内部总维度，当前为 3072。</dd>
+              <dt><code>rearrange</code></dt>
+              <dd>只改变张量视图/排列；真正的升维来自前面的 <code>nn.Linear(hidden_dim, H*d_h)</code>。</dd>
+            </dl>
+            <pre><code>q = rearrange(q, "b s (n d) -> b n s d", n=num_heads)
+k = rearrange(k, "b s (n d) -> b n s d", n=num_heads)
+v = rearrange(v, "b s (n d) -> b n s d", n=num_heads)
+x = F.scaled_dot_product_attention(q, k, v, attn_mask=ctx_mask)
+x = rearrange(x, "b n s d -> b s (n d)", n=num_heads)</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F18. MLP 残差更新</strong>
+            <a class="source" href="../src/fastwam/models/wan22/mot.py">mot.py:120-122</a>
+          </div>
+          <div class="formula-body">
+            \[
+            X_e^{\ell+1}
+            =
+            \tilde X_e^\ell
+            +
+            G_{\text{mlp},e}\odot
+            \operatorname{FFN}\left(
+              \operatorname{LN}_2(\tilde X_e^\ell)\odot(1+S_{\text{mlp},e})
+              +\Delta_{\text{mlp},e}
+            \right)
+            \]
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(X_e^{\ell+1}\)</dt>
+              <dd>当前 DiT block 输出，作为下一层输入。</dd>
+              <dt>\(\operatorname{FFN}\)</dt>
+              <dd>两层 MLP，中间 GELU，对应 <code>block.ffn</code>。</dd>
+              <dt>\(\operatorname{LN}_2\)</dt>
+              <dd>MLP 前的 LayerNorm，对应 <code>block.norm2</code>。</dd>
+              <dt>\(S_{\text{mlp},e},\Delta_{\text{mlp},e}\)</dt>
+              <dd>MLP 输入的 scale 和 shift。</dd>
+              <dt>\(G_{\text{mlp},e}\)</dt>
+              <dd>MLP residual branch 的 gate。</dd>
+            </dl>
+            <pre><code>mlp_input = modulate(block.norm2(x), shift_mlp, scale_mlp)
+x = block.gate(x, gate_mlp, block.ffn(mlp_input))</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="loss">
+        <h2>8. 训练 Loss</h2>
+        <p>
+          MoT 输出每个 expert 的更新后 tokens。Video Expert head 把 video tokens 还原成 VAE latent flow，
+          Action Expert head 把 action tokens 还原成 action flow。两者都用 MSE 对齐 flow-matching target。
+        </p>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F19. Head 输出</strong>
+            <a class="source" href="../src/fastwam/models/wan22/fastwam.py">fastwam.py:530-532</a>
+          </div>
+          <div class="formula-body">
+            \[
+            \hat v_v = H_v(X_v^L),\qquad
+            \hat v_a = H_a(X_a^L)
+            \]
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(X_v^L,X_a^L\)</dt>
+              <dd>经过全部 \(L\) 层 MoT/DiT block 后的 video/action token。这里 \(L\) 是层数，不是 context 长度。</dd>
+              <dt>\(H_v\)</dt>
+              <dd>Video Expert 的输出 head，把 video token 还原为 VAE latent flow 形状。</dd>
+              <dt>\(H_a\)</dt>
+              <dd>Action Expert 的输出 head，把 action token 还原为 action_dim 维 flow。</dd>
+              <dt>\(\hat v_v,\hat v_a\)</dt>
+              <dd>模型预测的 video flow 和 action flow，对应 <code>pred_video</code> 与 <code>pred_action</code>。</dd>
+            </dl>
+            <pre><code>pred_video = self.video_expert.post_dit(tokens_out["video"], video_pre)
+pred_action = self.action_expert.post_dit(tokens_out["action"], action_pre)</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F20. Video flow loss</strong>
+            <a class="source" href="../src/fastwam/models/wan22/fastwam.py">fastwam.py:409-447, 534-548</a>
+          </div>
+          <div class="formula-body">
+            \[
+            \mathcal{L}_v
+            =
+            \mathbb{E}_{b}
+            \left[
+              w(t_v^{(b)})
+              \cdot
+              \frac{1}{|\Omega_b|}
+              \sum_{i\in\Omega_b}
+              \left\|
+                \hat v_{v,i}^{(b)} - v_{v,i}^{\star(b)}
+              \right\|_2^2
+            \right]
+            \]
+            <p class="formula-note">
+              如果启用 clean first-frame latent，loss 会裁掉第一帧 latent，只监督未来 latent。
+              <code>image_is_pad</code> 会过滤 padding 帧。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(\mathcal{L}_v\)</dt>
+              <dd>video 分支 flow-matching loss。</dd>
+              <dt>\(b\)</dt>
+              <dd>batch 样本索引。</dd>
+              <dt>\(w(t_v^{(b)})\)</dt>
+              <dd>video scheduler 对当前 timestep 的 loss weight。</dd>
+              <dt>\(\Omega_b\)</dt>
+              <dd>当前样本中有效 video latent 元素集合；padding 帧和可选首帧会被排除。</dd>
+              <dt>\(i\)</dt>
+              <dd>video latent 中的元素索引，包含通道、时间、空间位置。</dd>
+              <dt>\(v_{v,i}^{\star(b)}\)</dt>
+              <dd>video flow target 的第 \(i\) 个元素。</dd>
+            </dl>
+            <pre><code>if inputs["first_frame_latents"] is not None:
+    pred_video = pred_video[:, :, 1:]
+    target_video = target_video[:, :, 1:]
+
+loss_video_per_sample = self._compute_video_loss_per_sample(...)
+video_weight = self.train_video_scheduler.training_weight(timestep_video)
+loss_video = (loss_video_per_sample * video_weight).mean()</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F21. Action flow loss</strong>
+            <a class="source" href="../src/fastwam/models/wan22/fastwam.py">fastwam.py:550-563</a>
+          </div>
+          <div class="formula-body">
+            \[
+            \mathcal{L}_a
+            =
+            \mathbb{E}_{b}
+            \left[
+              w(t_a^{(b)})
+              \cdot
+              \frac{1}{|\mathcal{T}_b|}
+              \sum_{\tau\in\mathcal{T}_b}
+              \left\|
+                \hat v_{a,\tau}^{(b)} - v_{a,\tau}^{\star(b)}
+              \right\|_2^2
+            \right]
+            \]
+            <p class="formula-note">
+              <code>action_is_pad</code> 过滤 padding action step。每个动作维度先求均值，再对有效时间步平均。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(\mathcal{L}_a\)</dt>
+              <dd>action 分支 flow-matching loss。</dd>
+              <dt>\(w(t_a^{(b)})\)</dt>
+              <dd>action scheduler 对当前 timestep 的 loss weight。</dd>
+              <dt>\(\mathcal{T}_b\)</dt>
+              <dd>当前样本中有效 action 时间步集合，padding step 会被排除。</dd>
+              <dt>\(\tau\)</dt>
+              <dd>动作序列中的时间步索引。</dd>
+              <dt>\(\hat v_{a,\tau}^{(b)}\)</dt>
+              <dd>模型预测的第 \(\tau\) 个动作 flow 向量。</dd>
+              <dt>\(v_{a,\tau}^{\star(b)}\)</dt>
+              <dd>目标动作 flow，即 \(\epsilon_a-A_0\) 的第 \(\tau\) 个向量。</dd>
+            </dl>
+            <pre><code>action_loss_token = F.mse_loss(
+    pred_action.float(), target_action.float(), reduction="none"
+).mean(dim=2)
+
+valid = (~action_is_pad).to(...)
+action_loss_per_sample = (action_loss_token * valid).sum(dim=1) / valid_sum
+action_weight = self.train_action_scheduler.training_weight(timestep_action)
+loss_action = (action_loss_per_sample * action_weight).mean()</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F22. 总 loss</strong>
+            <a class="source" href="../src/fastwam/models/wan22/fastwam.py">fastwam.py:563-568</a>
+          </div>
+          <div class="formula-body">
+            \[
+            \mathcal{L}
+            =
+            \lambda_v\mathcal{L}_v+\lambda_a\mathcal{L}_a
+            \]
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(\mathcal{L}\)</dt>
+              <dd>最终反向传播的总 loss。</dd>
+              <dt>\(\lambda_v,\lambda_a\)</dt>
+              <dd>video/action loss 权重，对应配置里的 <code>loss.lambda_video</code> 和 <code>loss.lambda_action</code>。</dd>
+              <dt>\(\mathcal{L}_v,\mathcal{L}_a\)</dt>
+              <dd>分别来自 video latent flow 和 action flow 的 MSE loss。</dd>
+            </dl>
+            <pre><code>loss_total = self.loss_lambda_video * loss_video + self.loss_lambda_action * loss_action</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="inference">
+        <h2>9. 推理动作生成</h2>
+        <p>
+          <code>infer_action</code> 只需要当前图像、prompt 或预计算 context、可选 proprio。
+          它先把当前图像编码成首帧 latent，再缓存 video 分支每层的 K/V。之后每个 action denoise step 只更新 action 分支。
+        </p>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F23. 动作初始化</strong>
+            <a class="source" href="../src/fastwam/models/wan22/fastwam.py">fastwam.py:952-962</a>
+          </div>
+          <div class="formula-body">
+            \[
+            A_{\sigma=1}^{(0)} \sim \mathcal{N}(0,I),
+            \qquad
+            Z_{\text{first}}=\operatorname{VAEEnc}(I_0)
+            \]
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(A_{\sigma=1}^{(0)}\)</dt>
+              <dd>推理初始 action latent，完全由高斯噪声采样；上标 \((0)\) 表示第 0 个推理迭代状态。</dd>
+              <dt>\(\mathcal{N}(0,I)\)</dt>
+              <dd>标准正态分布，形状是 \([1,\text{action_horizon},d_a]\)。</dd>
+              <dt>\(I_0\)</dt>
+              <dd>当前观测图像，即推理时传入的第一帧图像。</dd>
+              <dt>\(Z_{\text{first}}\)</dt>
+              <dd>当前图像经过 VAE 编码得到的首帧 latent。</dd>
+            </dl>
+            <pre><code>latents_action = torch.randn((1, action_horizon, self.action_expert.action_dim), ...)
+first_frame_latents = self._encode_input_image_latents_tensor(input_image=input_image)</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F24. Video cache</strong>
+            <a class="source" href="../src/fastwam/models/wan22/fastwam.py">fastwam.py:993-1022</a>
+          </div>
+          <div class="formula-body">
+            \[
+            \mathcal{K}\mathcal{V}_v
+            =
+            \operatorname{PrefillVideoCache}(Z_{\text{first}}, C)
+            \]
+            <p class="formula-note">
+              缓存的是每层 video self-attention 的 K/V。推理动作时 action queries 会 attend 到 cached video K/V 和当前 action K/V。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(\mathcal{K}\mathcal{V}_v\)</dt>
+              <dd>video 分支每一层 self-attention 的 key/value cache。</dd>
+              <dt>\(\operatorname{PrefillVideoCache}\)</dt>
+              <dd>先只跑 video 分支，把首帧条件对应的 per-layer video K/V 保存下来。</dd>
+              <dt>\(Z_{\text{first}}\)</dt>
+              <dd>首帧 VAE latent，推理 action 时固定不变。</dd>
+              <dt>\(C\)</dt>
+              <dd>推理条件 context，来自 prompt 编码或外部传入的 precomputed context，再加可选 proprio。</dd>
+            </dl>
+            <pre><code>video_pre = self.video_expert.pre_dit(
+    x=first_frame_latents, timestep=timestep_video,
+    context=context, context_mask=context_mask, action=None,
+    fuse_vae_embedding_in_latents=fuse_flag,
+)
+video_kv_cache = self.mot.prefill_video_cache(...)</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F25. 推理积分步</strong>
+            <a class="source" href="../src/fastwam/models/wan22/schedulers/scheduler_continuous.py">scheduler_continuous.py:63-88</a>
+          </div>
+          <div class="formula-body">
+            \[
+            \sigma_0>\sigma_1>\cdots>\sigma_K=0,\qquad
+            \Delta_k=\sigma_{k+1}-\sigma_k
+            \]
+            \[
+            A_{\sigma_{k+1}}
+            =
+            A_{\sigma_k}
+            +
+            \Delta_k
+            \hat v_\theta(A_{\sigma_k}, Z_{\text{first}}, C, t_k)
+            \]
+            <p class="formula-note">
+              因为 \(\Delta_k<0\)，模型预测的是 noise-minus-clean 方向，积分时会从噪声逐步回到 clean action。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(\sigma_k\)</dt>
+              <dd>第 \(k\) 个推理噪声强度，从接近 1 递减到 0。</dd>
+              <dt>\(\Delta_k\)</dt>
+              <dd>相邻两个噪声强度的差，等于 \(\sigma_{k+1}-\sigma_k\)，因此通常是负数。</dd>
+              <dt>\(A_{\sigma_k}\)</dt>
+              <dd>第 \(k\) 步当前 action sample。</dd>
+              <dt>\(\hat v_\theta\)</dt>
+              <dd>FastWAM action 分支在当前 step 预测的 action flow。</dd>
+              <dt>\(K\)</dt>
+              <dd>推理总步数，对应 <code>num_inference_steps</code>，不要和 attention 的 key \(K\) 混淆。</dd>
+            </dl>
+            <pre><code>u_steps = torch.linspace(1.0, 0.0, num_inference_steps + 1)
+sigma_steps = self._phi(u_steps, shift)
+timesteps = sigma_steps[:-1] * float(self.num_train_timesteps)
+deltas = sigma_steps[1:] - sigma_steps[:-1]
+
+return sample + model_output * delta</code></pre>
+          </div>
+        </div>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F26. Action with cached video K/V</strong>
+            <a class="source" href="../src/fastwam/models/wan22/mot.py">mot.py:343-445</a>
+          </div>
+          <div class="formula-body">
+            \[
+            K=[K_v^{\text{cache}};K_a],\qquad
+            V=[V_v^{\text{cache}};V_a]
+            \]
+            \[
+            O_a=\operatorname{Attention}(Q_a,K,V;M_{a})
+            \]
+            <p class="formula-note">
+              这一步是动作推理的关键加速：当前图像对应的 video K/V 不随 action denoise step 变化，所以只算一次。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(Q_a\)</dt>
+              <dd>当前 action token 生成的 query，每个 denoise step 都要重新计算。</dd>
+              <dt>\(K_v^{\text{cache}},V_v^{\text{cache}}\)</dt>
+              <dd>从首帧 video 分支缓存下来的 key/value。</dd>
+              <dt>\(K_a,V_a\)</dt>
+              <dd>当前 action token 生成的 key/value。</dd>
+              <dt>\(M_a\)</dt>
+              <dd>action query 行对应的 joint attention mask，只允许 action 看首帧 video token 和 action token。</dd>
+              <dt>\(O_a\)</dt>
+              <dd>action mixed self-attention 输出，之后还会进入 action cross attention 和 MLP。</dd>
+            </dl>
+            <pre><code>k_cat = torch.cat([k_video, k_action], dim=1)
+v_cat = torch.cat([v_video, v_action], dim=1)
+mixed = self._mixed_attention(
+    q_cat=q_action, k_cat=k_cat, v_cat=v_cat,
+    attention_mask=action_attention_mask,
+)</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="zipmotion">
+        <h2>10. 接入 ZipMotion 的位置</h2>
+        <p>
+          如果把 ZipMotion 作为额外 motion context 接入 FastWAM，最小侵入路径是扩展 context，而不是改 VAE 或 MoT 主干。
+          原因是 FastWAM 已经有稳定的 cross attention 通道负责让 action/video token 读取外部条件。
+        </p>
+
+        <div class="formula-card">
+          <div class="formula-head">
+            <strong>F27. Motion tokens 作为 context 扩展</strong>
+            <a class="source" href="../src/fastwam/models/wan22/fastwam.py">fastwam.py:219-240</a>
+          </div>
+          <div class="formula-body">
+            \[
+            M_z = E_{\text{ZipMotion}}(I_0,\operatorname{tracks})
+            \in \mathbb{R}^{B\times L_m\times d_z}
+            \]
+            \[
+            C_m = M_z W_m + b_m
+            \in \mathbb{R}^{B\times L_m\times4096}
+            \]
+            \[
+            C'=\operatorname{Concat}(C_{\text{text}},c_p,C_m)
+            \]
+            <p class="formula-note">
+              这样 Action Expert 和 Video Expert 原有的 cross attention 公式不变，只是 context 长度从 \(L_c\) 变成 \(L_c+L_m\)。
+              训练时不能使用未来真实轨迹作为 policy 输入，否则会产生信息泄漏；应使用当前可观测帧预测出的 motion tokens。
+            </p>
+            <h3 class="mini-title">参数说明</h3>
+            <dl class="param-list">
+              <dt>\(E_{\text{ZipMotion}}\)</dt>
+              <dd>ZipMotion/ZipMo 的点追踪 motion encoder 或 predictor。</dd>
+              <dt>\(I_0\)</dt>
+              <dd>当前可观测图像帧；部署时只能使用当前和历史观测，不能使用未来帧。</dd>
+              <dt>\(\operatorname{tracks}\)</dt>
+              <dd>由当前可用观测预测或构造的点轨迹信息；如果来自未来 GT 轨迹，会造成 policy 信息泄漏。</dd>
+              <dt>\(M_z\)</dt>
+              <dd>ZipMotion 输出的 motion token 序列，原始维度是 \(d_z\)。</dd>
+              <dt>\(W_m,b_m\)</dt>
+              <dd>motion projector，把 \(d_z\) 投到 FastWAM 原始 context 维度 4096。</dd>
+              <dt>\(C_m\)</dt>
+              <dd>可被 FastWAM cross attention 读取的 motion context token。</dd>
+              <dt>\(C'\)</dt>
+              <dd>扩展后的总 context；后续会被各 expert 的 <code>text_embedding</code> 投到自己的 hidden dim。</dd>
+            </dl>
+            <pre><code># 伪代码：与 proprio append 类似
+motion_context = self.motion_projector(zipmotion_tokens)  # [B, Lm, 4096]
+motion_mask = torch.ones((B, Lm), dtype=torch.bool, device=context.device)
+context = torch.cat([context, motion_context], dim=1)
+context_mask = torch.cat([context_mask, motion_mask], dim=1)</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="source-index">
+        <h2>11. 源码索引</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>模块</th>
+              <th>路径</th>
+              <th>本文使用的关键位置</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>FastWAM 主流程</td>
+              <td><a href="../src/fastwam/models/wan22/fastwam.py">src/fastwam/models/wan22/fastwam.py</a></td>
+              <td>context/proprio、build_inputs、training_loss、infer_action</td>
+            </tr>
+            <tr>
+              <td>Action Expert</td>
+              <td><a href="../src/fastwam/models/wan22/action_dit.py">src/fastwam/models/wan22/action_dit.py</a></td>
+              <td>action encoder、context projection、ActionDiT pre_dit</td>
+            </tr>
+            <tr>
+              <td>Video Expert 与 attention</td>
+              <td><a href="../src/fastwam/models/wan22/wan_video_dit.py">src/fastwam/models/wan22/wan_video_dit.py</a></td>
+              <td>Conv3D patchify、CrossAttention、flash_attention、DiTBlock</td>
+            </tr>
+            <tr>
+              <td>MoT</td>
+              <td><a href="../src/fastwam/models/wan22/mot.py">src/fastwam/models/wan22/mot.py</a></td>
+              <td>video/action QKV 拼接、mixed self-attention、video cache</td>
+            </tr>
+            <tr>
+              <td>Flow scheduler</td>
+              <td><a href="../src/fastwam/models/wan22/schedulers/scheduler_continuous.py">src/fastwam/models/wan22/schedulers/scheduler_continuous.py</a></td>
+              <td>采样时间、加噪、训练目标、推理积分</td>
+            </tr>
+            <tr>
+              <td>LeRobot 视频数据集</td>
+              <td><a href="../src/fastwam/datasets/lerobot/robot_video_dataset.py">src/fastwam/datasets/lerobot/robot_video_dataset.py</a></td>
+              <td>多相机拼接、文本 context cache、action/proprio 对齐</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

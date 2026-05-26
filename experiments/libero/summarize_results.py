@@ -1,9 +1,15 @@
 import os
 import json
 import argparse
+import re
 from collections import defaultdict
 import pandas as pd
 import math
+
+
+RESULT_FILENAME_RE = re.compile(
+    r"^gpu\d+_task(?P<task_id>\d+)(?:_results|_trials.+_video_rerun)\.json$"
+)
 
 def format_time(seconds):
     """Format seconds as a human-readable duration string.
@@ -54,17 +60,18 @@ def summarize_results(output_dir):
         if not os.path.exists(suite_dir):
             continue
             
-        # Read all result files
+        # Read all result files. Selected-trial reruns use a different suffix
+        # so they can coexist with full-task eval results.
         for filename in os.listdir(suite_dir):
-            if not filename.startswith('gpu') or not filename.endswith('_results.json'):
+            result_match = RESULT_FILENAME_RE.match(filename)
+            if result_match is None:
                 continue
                 
             with open(os.path.join(suite_dir, filename), 'r') as f:
                 result = json.load(f)
             
             # Extract task ID from the filename
-            parts = filename.split('_')
-            task_id = int(parts[1].replace('task', ''))
+            task_id = int(result_match.group('task_id'))
             
             # Create the task identifier (suite_taskid)
             task_key = f"{suite}_{task_id}"
@@ -104,6 +111,8 @@ def summarize_results(output_dir):
     total_success_rate = 0
     total_time = 0
     total_suites = 0
+    total_trials = 0
+    total_successes = 0
     overall_psnr_sum = 0.0
     overall_psnr_count = 0
     
@@ -157,20 +166,24 @@ def summarize_results(output_dir):
             total_success_rate += success_rate
             total_time += stats['total_time']
             total_suites += 1
+            total_trials += stats['total_trials']
+            total_successes += stats['total_successes']
             if has_psnr_metric:
                 overall_psnr_sum += stats['psnr_sum']
                 overall_psnr_count += stats['psnr_count']
     
     if total_suites > 0:
         print("\nOverall statistics:")
-        avg_success_rate = total_success_rate/total_suites
+        avg_suite_success_rate = total_success_rate/total_suites
+        overall_success_rate = total_successes/total_trials * 100 if total_trials > 0 else 0
         avg_task_time = total_time/sum(s['total_tasks'] for s in suite_stats.values())
         max_task_time = max(s['max_time'] for s in suite_stats.values())
         overall_avg_psnr = None
         if has_psnr_metric:
             overall_avg_psnr = overall_psnr_sum / overall_psnr_count if overall_psnr_count > 0 else None
         
-        print(f"- Average success rate: {avg_success_rate:.2f}%")
+        print(f"- Overall success rate: {overall_success_rate:.2f}%")
+        print(f"- Average suite success rate: {avg_suite_success_rate:.2f}%")
         print(f"- Total time: {format_time(total_time)}")
         print(f"- Average time per task: {format_time(avg_task_time)}")
         print(f"- Longest task time: {format_time(max_task_time)}")
@@ -182,7 +195,7 @@ def summarize_results(output_dir):
         
         # Add an overall summary row
         df_data['Task Suite'].append('Overall')
-        df_data['Success Rate (%)'].append(f"{avg_success_rate:.2f}")
+        df_data['Success Rate (%)'].append(f"{overall_success_rate:.2f}")
         df_data['Average Time (s)'].append(f"{avg_task_time:.2f}")
         df_data['Max Time (s)'].append(f"{max_task_time:.2f}")
         if has_psnr_metric:
@@ -259,8 +272,13 @@ def summarize_results(output_dir):
     
     # Save the detailed JSON summary
     summary_file = os.path.join(output_dir, 'summary.json')
+    avg_suite_success_rate = total_success_rate/total_suites if total_suites > 0 else 0
+    overall_success_rate = total_successes/total_trials * 100 if total_trials > 0 else 0
     overall_stats = {
-        'average_success_rate': total_success_rate/total_suites if total_suites > 0 else 0,
+        'average_success_rate': overall_success_rate,
+        'average_suite_success_rate': avg_suite_success_rate,
+        'total_trials': total_trials,
+        'total_successes': total_successes,
         'total_time': total_time,
         'average_task_time': total_time/sum(s['total_tasks'] for s in suite_stats.values()) if suite_stats else 0,
     }
