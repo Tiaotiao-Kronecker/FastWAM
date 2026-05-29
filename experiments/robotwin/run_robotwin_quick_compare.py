@@ -211,6 +211,8 @@ def main() -> None:
 
     episodes = int(os.environ.get("EPISODES", "20"))
     num_gpus = int(os.environ.get("NUM_GPUS", "8"))
+    gpu_ids_raw = _split_words(os.environ.get("GPU_IDS"), [])
+    gpu_ids = [int(item) for item in gpu_ids_raw] if gpu_ids_raw else list(range(num_gpus))
     max_tasks_per_gpu = int(os.environ.get("MAX_TASKS_PER_GPU", "1"))
     task_config_name = os.environ.get("TASK", "robotwin_uncond_3cam_384_1e-4")
     timing_enabled = os.environ.get("TIMING_ENABLED")
@@ -218,6 +220,8 @@ def main() -> None:
         raise ValueError("EPISODES must be > 0")
     if num_gpus <= 0:
         raise ValueError("NUM_GPUS must be > 0")
+    if len(gpu_ids) == 0:
+        raise ValueError("GPU_IDS must contain at least one id when set")
     if max_tasks_per_gpu <= 0:
         raise ValueError("MAX_TASKS_PER_GPU must be > 0")
 
@@ -310,7 +314,7 @@ def main() -> None:
             close_log_handle(item.process)
 
     def try_launch_pending() -> None:
-        for gpu_id in range(num_gpus):
+        for gpu_id in gpu_ids:
             while jobs and gpu_running_count(gpu_id) < max_tasks_per_gpu:
                 running.append(launch(jobs.popleft(), gpu_id))
 
@@ -369,7 +373,7 @@ def main() -> None:
     log(
         f"quick compare start run_id={run_id} groups={group_names} tasks={len(tasks)} "
         f"phases={phases} episodes={episodes} num_gpus={num_gpus} "
-        f"max_tasks_per_gpu={max_tasks_per_gpu} total_jobs={total_jobs}"
+        f"gpu_ids={gpu_ids} max_tasks_per_gpu={max_tasks_per_gpu} total_jobs={total_jobs}"
     )
 
     has_failure = False
