@@ -65,8 +65,14 @@ one_step_meanflow:
   end_timestep: null
   derivative_epsilon: 0.05
   freeze_video_expert: true
+  equal_time_anchor_prob: 0.0
+  lora_rank: 0
+  lora_alpha: 1.0
+  lora_dropout: 0.0
+  lora_target_modules: null
 
 loss:
   lambda_meanflow_target: 1.0
+  lambda_equal_time_velocity: 0.0
   lambda_action_velocity: 0.0
   lambda_action_endpoint: 0.0

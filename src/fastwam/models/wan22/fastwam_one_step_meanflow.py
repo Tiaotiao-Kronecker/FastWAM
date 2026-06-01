@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 
 from .fastwam_one_step_action import FastWAMOneStepAction
+from .lora import install_lora_layers, iter_lora_parameters, lora_parameter_count, set_lora_trainable
 from .wan_video_dit import force_manual_attention, sinusoidal_embedding_1d
 
 
@@ -24,8 +25,14 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
         meanflow_train_proprio_encoder: bool = True,
         meanflow_conditioner_mode: str = "additive_start",
         loss_lambda_meanflow_target: float = 0.5,
+        loss_lambda_equal_time_velocity: float = 0.0,
         loss_lambda_action_velocity: float = 0.25,
         loss_lambda_action_endpoint: float = 0.25,
+        meanflow_equal_time_anchor_prob: float = 0.0,
+        meanflow_lora_rank: int = 0,
+        meanflow_lora_alpha: float = 1.0,
+        meanflow_lora_dropout: float = 0.0,
+        meanflow_lora_target_modules: Optional[list[str] | str] = None,
         freeze_video_expert: bool = True,
         **kwargs,
     ):
@@ -45,8 +52,37 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
         model.meanflow_train_proprio_encoder = bool(meanflow_train_proprio_encoder)
         model.meanflow_conditioner_mode = str(meanflow_conditioner_mode).strip().lower()
         model.loss_lambda_meanflow_target = float(loss_lambda_meanflow_target)
+        model.loss_lambda_equal_time_velocity = float(loss_lambda_equal_time_velocity)
+        model.meanflow_equal_time_anchor_prob = float(meanflow_equal_time_anchor_prob)
+        model.meanflow_lora_rank = int(meanflow_lora_rank)
+        model.meanflow_lora_alpha = float(meanflow_lora_alpha)
+        model.meanflow_lora_dropout = float(meanflow_lora_dropout)
+        model.meanflow_lora_target_modules = meanflow_lora_target_modules
+        model.meanflow_lora_installed_modules = []
+        if model.meanflow_lora_rank > 0:
+            model._install_action_lora()
         model._install_meanflow_start_conditioner()
         return model
+
+    def _install_action_lora(self) -> None:
+        if getattr(self, "meanflow_lora_rank", 0) <= 0:
+            return
+        installed = install_lora_layers(
+            self.action_expert,
+            target_modules=getattr(self, "meanflow_lora_target_modules", None),
+            rank=int(getattr(self, "meanflow_lora_rank", 4)),
+            alpha=float(getattr(self, "meanflow_lora_alpha", 4.0)),
+            dropout=float(getattr(self, "meanflow_lora_dropout", 0.0)),
+        )
+        if installed:
+            self.meanflow_lora_installed_modules = installed
+        set_lora_trainable(self.action_expert, False)
+
+    def _set_action_lora_trainable(self, trainable: bool) -> None:
+        if getattr(self, "meanflow_lora_rank", 0) <= 0:
+            return
+        self._install_action_lora()
+        set_lora_trainable(self.action_expert, trainable)
 
     def _meanflow_conditioner_mode(self) -> str:
         mode = str(getattr(self, "meanflow_conditioner_mode", "additive_start")).strip().lower()
@@ -159,6 +195,7 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
     def configure_trainable_parameters(self):
         super().configure_trainable_parameters()
         self._install_meanflow_start_conditioner()
+        self._install_action_lora()
 
         if not getattr(self, "meanflow_train_proprio_encoder", True):
             proprio_encoder = getattr(self, "proprio_encoder", None)
@@ -171,28 +208,54 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
             self.action_expert.train()
             self.action_expert.requires_grad_(True)
             self._set_meanflow_conditioner_trainable(True)
+            self._set_action_lora_trainable(True)
         elif scope == "conditioner":
             self.action_expert.eval()
             self.action_expert.requires_grad_(False)
             self._set_meanflow_conditioner_trainable(True)
+            self._set_action_lora_trainable(False)
         elif scope == "conditioner_head":
             self.action_expert.eval()
             self.action_expert.requires_grad_(False)
             self._set_meanflow_conditioner_trainable(True)
             self.action_expert.head.train()
             self.action_expert.head.requires_grad_(True)
+            self._set_action_lora_trainable(False)
+        elif scope == "conditioner_head_lora":
+            self.action_expert.eval()
+            self.action_expert.requires_grad_(False)
+            self._set_meanflow_conditioner_trainable(True)
+            self.action_expert.head.train()
+            self.action_expert.head.requires_grad_(True)
+            self._set_action_lora_trainable(True)
         else:
             raise ValueError(
                 "`meanflow_trainable_scope` must be one of "
-                "['action', 'conditioner', 'conditioner_head'], "
+                "['action', 'conditioner', 'conditioner_head', 'conditioner_head_lora'], "
                 f"got {scope!r}."
             )
 
     def extra_trainable_parameters(self):
         for module in self._meanflow_conditioner_modules():
             yield from module.parameters()
-        if getattr(self, "meanflow_trainable_scope", "action") == "conditioner_head":
+        scope = getattr(self, "meanflow_trainable_scope", "action")
+        if scope in ("conditioner_head", "conditioner_head_lora"):
             yield from self.action_expert.head.parameters()
+        if scope == "conditioner_head_lora":
+            yield from iter_lora_parameters(self.action_expert)
+
+    def trainable_parameter_summary(self) -> dict[str, int]:
+        conditioner = sum(param.numel() for module in self._meanflow_conditioner_modules() for param in module.parameters() if param.requires_grad)
+        head = sum(param.numel() for param in self.action_expert.head.parameters() if param.requires_grad)
+        lora = sum(param.numel() for param in iter_lora_parameters(self.action_expert) if param.requires_grad)
+        total = sum(param.numel() for param in self.parameters() if param.requires_grad)
+        return {
+            "trainable_total": int(total),
+            "trainable_conditioner": int(conditioner),
+            "trainable_head": int(head),
+            "trainable_lora": int(lora),
+            "lora_total": int(lora_parameter_count(self.action_expert)),
+        }
 
     def _apply_meanflow_start_conditioning(
         self,
@@ -376,6 +439,58 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
             fuse_vae_embedding_in_latents=fuse_vae_embedding_in_latents,
         )
 
+    def _maybe_equal_time_anchor_loss(
+        self,
+        *,
+        video_pre: dict,
+        action: torch.Tensor,
+        action_is_pad: Optional[torch.Tensor],
+        context: torch.Tensor,
+        context_mask: torch.Tensor,
+    ) -> tuple[Optional[torch.Tensor], dict[str, float]]:
+        lambda_anchor = float(getattr(self, "loss_lambda_equal_time_velocity", 0.0))
+        anchor_prob = float(getattr(self, "meanflow_equal_time_anchor_prob", 0.0))
+        if lambda_anchor == 0.0 or anchor_prob <= 0.0:
+            return None, {"equal_time_anchor_applied": 0.0}
+        if anchor_prob > 1.0:
+            raise ValueError(f"`meanflow_equal_time_anchor_prob` must be in [0, 1], got {anchor_prob}.")
+        anchor_decision = torch.rand((), device=action.device)
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            torch.distributed.broadcast(anchor_decision, src=0)
+        if anchor_decision >= anchor_prob:
+            return None, {"equal_time_anchor_applied": 0.0}
+
+        batch_size = action.shape[0]
+        sigma = torch.rand((batch_size,), device=action.device, dtype=torch.float32)
+        timestep = (sigma * float(self.train_action_scheduler.num_train_timesteps)).to(dtype=action.dtype)
+        noise_action = torch.randn_like(action)
+        noisy_action = (1.0 - self._sigma_view(sigma, action)) * action + self._sigma_view(
+            sigma,
+            action,
+        ) * noise_action
+        target_velocity = self.train_action_scheduler.training_target(
+            action,
+            noise_action,
+            timestep,
+        )
+        pred_velocity = self._predict_meanflow_action_velocity(
+            video_pre=video_pre,
+            action_tokens=noisy_action,
+            timestep_action=timestep,
+            timestep_start=timestep,
+            context=context,
+            context_mask=context_mask,
+        )
+        loss_anchor = self._masked_action_mse(
+            pred=pred_velocity,
+            target=target_velocity,
+            action_is_pad=action_is_pad,
+        )
+        return loss_anchor, {
+            "equal_time_anchor_applied": 1.0,
+            "equal_time_anchor_sigma": float(sigma.detach().float().mean().item()),
+        }
+
     def _set_checkpointing_enabled(self, enabled: bool) -> dict[str, bool]:
         states = {
             "mot_checkpoint_mixed_attn": bool(getattr(self.mot, "mot_checkpoint_mixed_attn", False)),
@@ -521,7 +636,24 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
             "meanflow_sigma_start": float(sigma_start.detach().float().mean().item()),
             "meanflow_sigma_end": float(sigma_end.detach().float().mean().item()),
             "meanflow_interval": float((sigma_end - sigma_start).detach().float().mean().item()),
+            "meanflow_dudt_rms": float(dudt.detach().float().pow(2).mean().sqrt().item()),
+            "pred_mean_velocity_rms": float(pred_mean_velocity.detach().float().pow(2).mean().sqrt().item()),
+            "target_meanflow_rms": float(meanflow_target.detach().float().pow(2).mean().sqrt().item()),
         }
+
+        loss_equal_time_velocity, anchor_metrics = self._maybe_equal_time_anchor_loss(
+            video_pre=video_pre,
+            action=action,
+            action_is_pad=action_is_pad,
+            context=context,
+            context_mask=context_mask,
+        )
+        loss_dict.update(anchor_metrics)
+        if loss_equal_time_velocity is not None:
+            loss_total = loss_total + self.loss_lambda_equal_time_velocity * loss_equal_time_velocity
+            loss_dict["loss_equal_time_velocity"] = self.loss_lambda_equal_time_velocity * float(
+                loss_equal_time_velocity.detach().item()
+            )
 
         if self.loss_lambda_action_velocity != 0.0:
             loss_action_velocity = self._masked_action_mse(
@@ -663,7 +795,23 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
             "meanflow_sigma_start": float(sigma_start.detach().float().mean().item()),
             "meanflow_sigma_end": float(sigma_end.detach().float().mean().item()),
             "meanflow_interval": float((sigma_end - sigma_start).detach().float().mean().item()),
+            "meanflow_dudt_rms": float(dudt.detach().float().pow(2).mean().sqrt().item()),
+            "pred_mean_velocity_rms": float(pred_mean_velocity.detach().float().pow(2).mean().sqrt().item()),
+            "target_meanflow_rms": float(meanflow_target.detach().float().pow(2).mean().sqrt().item()),
         }
+        loss_equal_time_velocity, anchor_metrics = self._maybe_equal_time_anchor_loss(
+            video_pre=video_pre,
+            action=action,
+            action_is_pad=action_is_pad,
+            context=context,
+            context_mask=context_mask,
+        )
+        loss_dict.update(anchor_metrics)
+        if loss_equal_time_velocity is not None:
+            loss_total = loss_total + self.loss_lambda_equal_time_velocity * loss_equal_time_velocity
+            loss_dict["loss_equal_time_velocity"] = self.loss_lambda_equal_time_velocity * float(
+                loss_equal_time_velocity.detach().item()
+            )
         return loss_total, loss_dict
 
     def training_loss(self, sample, tiled: bool = False):

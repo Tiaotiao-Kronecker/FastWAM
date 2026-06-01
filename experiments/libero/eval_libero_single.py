@@ -629,6 +629,9 @@ def run_single_episode(
     visualize_future_video = bool(cfg.EVALUATION.get("visualize_future_video", False))
     save_action_trace = bool(cfg.EVALUATION.get("save_action_trace", False))
     save_raw_action_trace = bool(cfg.EVALUATION.get("save_raw_action_trace", save_action_trace))
+    diagnose_action_values = bool(cfg.EVALUATION.get("diagnose_action_values", False))
+    action_abs_limit_cfg = cfg.EVALUATION.get("diagnose_action_abs_limit", None)
+    action_abs_limit = float(action_abs_limit_cfg) if action_abs_limit_cfg is not None else None
     capture_steps = set(_get_future_frame_capture_steps(cfg)[1:])
     action_trace = None
     if save_action_trace:
@@ -722,6 +725,31 @@ def run_single_episode(
 
         action_idx_in_replan = int(replan_steps - len(pending_actions))
         executed_action = pending_actions.pop(0)
+        if diagnose_action_values:
+            action_arr = np.asarray(executed_action, dtype=np.float32)
+            finite = bool(np.all(np.isfinite(action_arr)))
+            max_abs = float(np.max(np.abs(action_arr))) if action_arr.size > 0 else 0.0
+            invalid_reason = None
+            if not finite:
+                invalid_reason = "nonfinite"
+            elif action_abs_limit is not None and max_abs > action_abs_limit:
+                invalid_reason = f"abs>{action_abs_limit:g}"
+            if invalid_reason is not None:
+                diagnostic_record = {
+                    "env_t": int(t),
+                    "replan_idx": int(len(action_trace["replans"]) - 1) if action_trace is not None else -1,
+                    "action_idx_in_replan": int(action_idx_in_replan),
+                    "reason": invalid_reason,
+                    "finite": finite,
+                    "max_abs": max_abs,
+                    "action": action_arr.tolist(),
+                }
+                logging.error("Invalid eval action detected: %s", diagnostic_record)
+                if action_trace is not None:
+                    action_trace.setdefault("diagnostics", []).append(diagnostic_record)
+                    action_trace["invalid_action_failure"] = diagnostic_record
+                pbar.close()
+                return False, replay_images, predicted_future_video_clips, None, action_trace
         if action_trace is not None:
             executed_record = {
                 "env_t": int(t),

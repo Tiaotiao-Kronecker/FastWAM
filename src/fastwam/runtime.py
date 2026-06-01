@@ -559,6 +559,7 @@ def create_fastwam_one_step_meanflow(
         loss_lambda_video=float(loss.get("lambda_video", 1.0)),
         loss_lambda_action=float(loss.get("lambda_action", 1.0)),
         loss_lambda_meanflow_target=float(loss.get("lambda_meanflow_target", 0.5)),
+        loss_lambda_equal_time_velocity=float(loss.get("lambda_equal_time_velocity", 0.0)),
         loss_lambda_action_velocity=float(loss.get("lambda_action_velocity", 0.25)),
         loss_lambda_action_endpoint=float(loss.get("lambda_action_endpoint", 0.25)),
         meanflow_start_timestep=one_step_meanflow.get("start_timestep", 0.0),
@@ -570,6 +571,11 @@ def create_fastwam_one_step_meanflow(
         meanflow_trainable_scope=one_step_meanflow.get("trainable_scope", "action"),
         meanflow_train_proprio_encoder=bool(one_step_meanflow.get("train_proprio_encoder", True)),
         meanflow_conditioner_mode=one_step_meanflow.get("conditioner_mode", "additive_start"),
+        meanflow_equal_time_anchor_prob=float(one_step_meanflow.get("equal_time_anchor_prob", 0.0)),
+        meanflow_lora_rank=int(one_step_meanflow.get("lora_rank", 0)),
+        meanflow_lora_alpha=float(one_step_meanflow.get("lora_alpha", 1.0)),
+        meanflow_lora_dropout=float(one_step_meanflow.get("lora_dropout", 0.0)),
+        meanflow_lora_target_modules=one_step_meanflow.get("lora_target_modules", None),
         freeze_video_expert=bool(one_step_meanflow.get("freeze_video_expert", True)),
     )
 

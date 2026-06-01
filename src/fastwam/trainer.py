@@ -10,7 +10,7 @@ import time
 import numpy as np
 import torch
 from accelerate import Accelerator
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from PIL import Image
 from torch.optim.lr_scheduler import ConstantLR, CosineAnnealingLR, LinearLR, SequentialLR
 from torch.utils.data import DataLoader
@@ -107,6 +107,19 @@ class Wan22Trainer:
         trainable_params = deduped_trainable_params
         if not trainable_params:
             raise ValueError("No trainable parameters found after applying train-mode policy.")
+        summary_fn = getattr(self.model, "trainable_parameter_summary", None)
+        if callable(summary_fn):
+            self.trainable_param_summary = dict(summary_fn())
+        else:
+            self.trainable_param_summary = {}
+        self.trainable_param_summary.setdefault(
+            "trainable_total",
+            int(sum(param.numel() for param in trainable_params)),
+        )
+        logger.info(
+            "Trainable parameter summary: %s",
+            json.dumps(self.trainable_param_summary, sort_keys=True),
+        )
         self.optimizer = torch.optim.AdamW(
             trainable_params,
             lr=self.learning_rate,
@@ -166,7 +179,10 @@ class Wan22Trainer:
             group=None if self.cfg.wandb.group in (None, "null", "") else str(self.cfg.wandb.group),
             mode=self.cfg.wandb.mode,
             dir=self.output_dir,
+            config=OmegaConf.to_container(self.cfg, resolve=True),
         )
+        if self.trainable_param_summary:
+            self._wandb_log({f"params/{key}": value for key, value in self.trainable_param_summary.items()})
         logger.info(
             "Initialized wandb run: workspace=%s project=%s name=%s",
             self.cfg.wandb.workspace,

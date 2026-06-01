@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FastWAM MeanFlow A1 Action-LoRA 实现归档</title>
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['\\[', '\\]']] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --paper: #ffffff;
+      --ink: #172033;
+      --muted: #596579;
+      --line: #dfe5ee;
+      --accent: #1769aa;
+      --accent-soft: #e8f2fb;
+      --good: #18794e;
+      --warn: #a15c00;
+      --bad: #b42318;
+      --code: #102a43;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif;
+    }
+    header {
+      background: #0f2438;
+      color: #fff;
+      padding: 40px 24px 30px;
+      border-bottom: 1px solid #0b1b2b;
+    }
+    .wrap, main {
+      max-width: 1120px;
+      margin: 0 auto;
+    }
+    main { padding: 24px 24px 56px; }
+    h1 { margin: 0 0 10px; font-size: 32px; line-height: 1.2; letter-spacing: 0; }
+    h2 { margin: 0 0 14px; font-size: 22px; line-height: 1.3; letter-spacing: 0; }
+    h3 { margin: 22px 0 10px; font-size: 17px; line-height: 1.35; letter-spacing: 0; }
+    p { margin: 10px 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    nav {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 18px;
+    }
+    nav a { display: inline-block; margin: 4px 14px 4px 0; font-weight: 650; }
+    section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 22px;
+      margin: 18px 0;
+    }
+    .subtitle { margin: 0; color: #c7d8e8; font-size: 16px; }
+    .muted { color: var(--muted); }
+    .callout {
+      border: 1px solid #bfdbfe;
+      background: var(--accent-soft);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin: 14px 0;
+    }
+    .warn {
+      border-color: #f6d58b;
+      background: #fff8e8;
+    }
+    .formula {
+      border: 1px solid var(--line);
+      background: #fbfcff;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin: 12px 0;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin: 12px 0 18px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      vertical-align: top;
+      text-align: left;
+      overflow-wrap: anywhere;
+    }
+    th { background: #eef3f9; font-weight: 650; }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      color: var(--code);
+    }
+    code {
+      background: #eef3f9;
+      border: 1px solid #dfe5ee;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-size: 0.92em;
+    }
+    pre {
+      background: #0f172a;
+      color: #e5edf6;
+      border-radius: 10px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    pre code { color: inherit; background: transparent; border: 0; padding: 0; }
+    .tag {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      line-height: 1.5;
+      font-weight: 650;
+      background: #eef3f9;
+      color: #344054;
+      border: 1px solid #d7dee8;
+    }
+    .tag.good { color: var(--good); background: #ecfdf3; border-color: #abefc6; }
+    .tag.warn { color: var(--warn); background: #fff8e8; border-color: #f6d58b; }
+    .tag.bad { color: var(--bad); background: #fef3f2; border-color: #fecdca; }
+    ul { margin: 8px 0 12px 22px; padding: 0; }
+    li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>FastWAM MeanFlow A1 Action-LoRA 实现归档</h1>
+      <p class="subtitle">归档新的 action-only MeanFlow 方案：冻结 video/proprio，保留 release action body，训练 joint-delta conditioner、action head 与少量 action LoRA，并加入 equal-time velocity anchor。</p>
+      <p class="subtitle">状态：设计与实现计划归档，作为后续代码修改和训练运行的对照文档。</p>
+    </div>
+  </header>
+
+  <main>
+    <nav>
+      <a href="#motivation">方案动机</a>
+      <a href="#math">数学形式</a>
+      <a href="#lora">LoRA 实现</a>
+      <a href="#implementation">代码结构</a>
+      <a href="#mot">MoT 兼容性</a>
+      <a href="#loss">Loss 与 Anchor</a>
+      <a href="#code">代码改动</a>
+      <a href="#config">配置</a>
+      <a href="#training">训练计划</a>
+      <a href="#preflight">Preflight</a>
+      <a href="meanflow_a1_wandb_metrics.html">WandB 指标页</a>
+    </nav>
+
+    <section id="motivation">
+      <h2>1. 方案动机</h2>
+      <p>
+        旧的 C-action-only MeanFlow 放开了 full action expert 和 proprio encoder。它在 2k 到 effective 8k 的训练里没有解决 LIBERO-10 的 0/4 失败，
+        trace 也显示 long-horizon gripper/action phase 被破坏。新的 A1 方案不再默认 full action dense finetune，而是使用受控容量扩展。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>方案</th>
+            <th>判断</th>
+            <th>主要风险</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>conditioner-only</td>
+            <td>最稳，但可能只是 release time modulation 的小标定。</td>
+            <td>容量不足，无法表达真正的平均速度场。</td>
+          </tr>
+          <tr>
+            <td>full action expert</td>
+            <td>容量最大。</td>
+            <td>容易破坏 release policy semantics，旧 action-only 已显示 gripper/task timing 漂移。</td>
+          </tr>
+          <tr>
+            <td><span class="tag good">A1</span> conditioner + head + LoRA</td>
+            <td>在 release body 上增加低秩、零初始化的可训练修正。</td>
+            <td>容量仍可能不足，但 failure 更容易定位。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        A1 的目标不是证明 MeanFlow 一定只需小改动，而是避免一开始就把“平均速度 readout 适配”和“release policy 语义漂移”混在一起。
+      </div>
+    </section>
+
+    <section id="math">
+      <h2>2. MeanFlow 与 Equal-Time 边界</h2>
+      <p>动作流的训练路径记为：</p>
+      <div class="formula">
+        \[
+        x_t = (1-t)a_0 + t\epsilon,\qquad v = \epsilon - a_0
+        \]
+      </div>
+      <p>A1 学习区间平均速度：</p>
+      <div class="formula">
+        \[
+        u_\theta(x_t,t,r\mid c),\qquad 0 \le r < t \le 1
+        \]
+      </div>
+      <p>finite-difference MeanFlow 主目标沿用当前实现形式：</p>
+      <div class="formula">
+        \[
+        u_{\mathrm{target}} = v - (t-r)\frac{\partial u_\theta}{\partial t}
+        \]
+      </div>
+      <p>新增 equal-time anchor 使用 MeanFlow 自身边界条件：</p>
+      <div class="formula">
+        \[
+        u_\theta(x_t,t,t\mid c)=v(x_t,t\mid c)
+        \]
+      </div>
+      <p>
+        这个 anchor 不等价于把所有 interval 拉回 flow matching。它只在 \(r=t\) 或 near-equal branch 上启用，用来防止 LoRA/head
+        把小 interval 的 release velocity semantics 搅乱。
+      </p>
+    </section>
+
+    <section id="lora">
+      <h2>3. Action-LoRA 数学与实现约束</h2>
+      <p>对一个原始线性层 \(y=xW_0^\top+b\)，LoRA 增加低秩残差：</p>
+      <div class="formula">
+        \[
+        y = xW_0^\top+b + \frac{\alpha}{r}xA^\top B^\top
+        \]
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>符号</th>
+            <th>含义</th>
+            <th>A1 设置</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>\(W_0,b\)</td>
+            <td>release checkpoint 中已有的 dense weight 和 bias。</td>
+            <td>冻结，不直接训练。</td>
+          </tr>
+          <tr>
+            <td>\(A\)</td>
+            <td>down projection，形状约为 \(r\times d_{in}\)。</td>
+            <td>随机小初始化。</td>
+          </tr>
+          <tr>
+            <td>\(B\)</td>
+            <td>up projection，形状约为 \(d_{out}\times r\)。</td>
+            <td>零初始化，保证 step0 等价 release。</td>
+          </tr>
+          <tr>
+            <td>\(\alpha/r\)</td>
+            <td>LoRA scale。</td>
+            <td>第一版用 \(\alpha=r=4\)。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>State Dict 兼容要求</h3>
+      <p>
+        A1 的 LoRA wrapper 必须保留原始 <code>nn.Linear</code> 的 <code>weight</code> 和 <code>bias</code> key。
+        这样 release checkpoint 的 <code>self_attn.q.weight</code> 等权重能正常加载，LoRA 只新增 <code>lora_A</code> 与 <code>lora_B</code>。
+      </p>
+      <pre><code>class LoRALinear(nn.Linear):
+    def __init__(self, base: nn.Linear, rank: int, alpha: float, dropout: float):
+        super().__init__(
+            in_features=base.in_features,
+            out_features=base.out_features,
+            bias=base.bias is not None,
+            device=base.weight.device,
+            dtype=base.weight.dtype,
+        )
+        self.weight.data.copy_(base.weight.data)
+        if base.bias is not None:
+            self.bias.data.copy_(base.bias.data)
+        self.weight.requires_grad_(False)
+        if self.bias is not None:
+            self.bias.requires_grad_(False)
+
+        self.lora_A = nn.Parameter(...)
+        self.lora_B = nn.Parameter(torch.zeros(...))
+        self.scaling = alpha / rank
+
+    def forward(self, x):
+        base = F.linear(x, self.weight, self.bias)
+        delta = F.linear(F.linear(self.dropout(x), self.lora_A), self.lora_B)
+        return base + self.scaling * delta</code></pre>
+    </section>
+
+    <section id="implementation">
+      <h2>4. LoRA 代码结构归档</h2>
+      <p>
+        A1 的 LoRA 不是单独训练一个新 action expert，而是在 release action expert 的若干 <code>nn.Linear</code>
+        上安装低秩残差。核心约束是：base weight/bias 原样从 release checkpoint 加载并冻结，只有
+        <code>lora_A</code>/<code>lora_B</code> 参与 optimizer。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>函数/模块</th>
+            <th>职责</th>
+            <th>关键行为</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>LoRALinear</code></td>
+            <td>包装单个 <code>nn.Linear</code>。</td>
+            <td>保留 <code>weight</code>/<code>bias</code> key，新增 <code>lora_A</code>/<code>lora_B</code>；<code>lora_B</code> 零初始化。</td>
+          </tr>
+          <tr>
+            <td><code>matches_lora_target(name, targets)</code></td>
+            <td>判断模块名是否属于 action LoRA target。</td>
+            <td>第一版只匹配 action expert 内部模块，避免误装到 video expert 或 shared wrapper。</td>
+          </tr>
+          <tr>
+            <td><code>install_action_lora(model, cfg)</code></td>
+            <td>遍历 action expert blocks 并替换目标 <code>nn.Linear</code>。</td>
+            <td>替换后立即冻结 base 参数，返回安装数量和 LoRA 参数量用于日志。</td>
+          </tr>
+          <tr>
+            <td><code>configure_trainable_parameters()</code></td>
+            <td>统一控制训练范围。</td>
+            <td>冻结 video/proprio/action base，打开 conditioner、action head、LoRA。</td>
+          </tr>
+        </tbody>
+      </table>
+      <pre><code>def install_action_lora(action_model, targets, rank=4, alpha=4, dropout=0.0):
+    installed = []
+    for module_name, parent, child_name, child in iter_named_linears(action_model):
+        if not matches_lora_target(module_name, targets):
+            continue
+        wrapped = LoRALinear(child, rank=rank, alpha=alpha, dropout=dropout)
+        setattr(parent, child_name, wrapped)
+        installed.append(module_name)
+    return installed
+
+def configure_trainable_parameters(self):
+    self.requires_grad_(False)
+    self.freeze_video_expert()
+    self.proprio_encoder.requires_grad_(False)
+
+    enable_train(self.meanflow_joint_time_embedding)
+    enable_train(self.meanflow_joint_time_projection)
+    enable_train(self.action_head)
+    enable_lora_only(self.action_model)</code></pre>
+      <div class="callout warn">
+        这里记录的是 A1 代码改动的目标形态。落地实现时需要先做 zero-update parity：安装 LoRA 后不训练，
+        使用同一 release checkpoint 和同一 eval config，成功率和 action trace 应接近 <code>release_1</code>。
+      </div>
+    </section>
+
+    <section id="mot">
+      <h2>5. 与 MoT 的兼容性</h2>
+      <p>
+        MoT 没有独立的一套 shared q/k/v 权重。它在每层分别调用 video expert 和 action expert 的 block，得到各自的 q/k/v，
+        再把 token 维度 concat 后做 mixed attention。因此 Action-LoRA 只改变 action expert 的投影输出，不改变 MoT 的接口。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>路径</th>
+            <th>A1 行为</th>
+            <th>影响</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>video expert q/k/v</td>
+            <td>冻结，不装 LoRA。</td>
+            <td>video cache 与 release 保持一致。</td>
+          </tr>
+          <tr>
+            <td>action expert q/v/o、cross-attn、FFN</td>
+            <td>装 LoRA，base weight 冻结。</td>
+            <td>给 action branch 增加低秩 x-dependent 修正能力。</td>
+          </tr>
+          <tr>
+            <td>MoT mixed attention</td>
+            <td>无需改动。</td>
+            <td>输入输出 tensor shape 不变。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        评测 A1 checkpoint 时必须使用包含 LoRA wrapper 的 A1 config。否则 checkpoint 中的 LoRA key 会被忽略，评出来可能不是实际训练后的模型。
+      </div>
+    </section>
+
+    <section id="loss">
+      <h2>6. Loss 组成</h2>
+      <pre><code>L_total =
+    lambda_meanflow_target * L_meanflow_target
+  + lambda_equal_time_velocity * L_equal_time_velocity</code></pre>
+      <table>
+        <thead>
+          <tr>
+            <th>Loss</th>
+            <th>定义</th>
+            <th>A1 默认</th>
+            <th>备注</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>L_meanflow_target</code></td>
+            <td>finite-difference MeanFlow target MSE。</td>
+            <td><code>1.0</code></td>
+            <td>主训练目标。</td>
+          </tr>
+          <tr>
+            <td><code>L_equal_time_velocity</code></td>
+            <td>在 <code>r=t</code> branch 上对齐 \(u_\theta(x_t,t,t)\) 与 \(v=\epsilon-a_0\)。</td>
+            <td><code>0.1</code></td>
+            <td>MeanFlow 边界条件，不是 release teacher。</td>
+          </tr>
+          <tr>
+            <td><code>L_action_velocity</code></td>
+            <td>旧辅助项，对所有 sampled interval 对齐瞬时 velocity。</td>
+            <td><code>0.0</code></td>
+            <td>不要在 A1 主线打开，否则会把大 interval 拉回普通 flow matching。</td>
+          </tr>
+          <tr>
+            <td><code>L_action_endpoint</code></td>
+            <td>旧 endpoint 辅助项。</td>
+            <td><code>0.0</code></td>
+            <td>随机 \(r&gt;0\) 时 target 不应直接是 \(a_0\)，第一版不启用。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="code">
+      <h2>7. 代码改动清单</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>文件</th>
+            <th>改动</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>src/fastwam/models/wan22/lora.py</code></td>
+            <td>新增 state-dict 兼容的 <code>LoRALinear</code> 和安装工具。</td>
+          </tr>
+          <tr>
+            <td><code>src/fastwam/models/wan22/fastwam_one_step_meanflow.py</code></td>
+            <td>新增 <code>conditioner_head_lora</code> scope、LoRA 安装、equal-time anchor loss、A1 诊断指标。</td>
+          </tr>
+          <tr>
+            <td><code>src/fastwam/runtime.py</code></td>
+            <td>解析 LoRA 和 anchor 相关配置字段。</td>
+          </tr>
+          <tr>
+            <td><code>src/fastwam/trainer.py</code></td>
+            <td>增加 trainable 参数统计、分组 grad norm、WandB action curve / eval video artifact 记录。</td>
+          </tr>
+          <tr>
+            <td><code>configs/model/fastwam_one_step_meanflow.yaml</code></td>
+            <td>新增 LoRA/anchor 默认字段，默认关闭，保持旧实验兼容。</td>
+          </tr>
+          <tr>
+            <td><code>configs/task/libero_one_step_meanflow_a1_lora_eqanchor_2cam224_5e-5.yaml</code></td>
+            <td>新增 A1 训练配置。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="config">
+      <h2>8. A1 训练配置草案</h2>
+      <pre><code>model:
+  one_step_meanflow:
+    objective: finite_difference
+    random_timesteps: true
+    equal_time_prob: 0.0
+    trainable_scope: conditioner_head_lora
+    train_proprio_encoder: false
+    conditioner_mode: joint_delta
+    freeze_video_expert: true
+    derivative_epsilon: 0.05
+
+    equal_time_anchor_prob: 0.25
+
+    lora_rank: 4
+    lora_alpha: 4
+    lora_dropout: 0.0
+    lora_layers: all
+    lora_target_modules:
+      - self_attn.q
+      - self_attn.v
+      - self_attn.o
+      - cross_attn.q
+      - cross_attn.o
+      - ffn.2
+
+loss:
+  lambda_meanflow_target: 1.0
+  lambda_equal_time_velocity: 0.1
+  lambda_action_velocity: 0.0
+  lambda_action_endpoint: 0.0
+
+learning_rate: 5e-5
+max_steps: 70000
+save_every: 5000
+save_training_state: true</code></pre>
+    </section>
+
+    <section id="training">
+      <h2>9. 数据与训练规模</h2>
+      <p>A1 使用 full four-suite LIBERO no-noops 数据，保持与 release checkpoint 对齐：</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Suite</th>
+            <th>Episodes</th>
+            <th>Frames / windows 量级</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>libero_spatial</code></td><td>434</td><td>53,229</td></tr>
+          <tr><td><code>libero_object</code></td><td>457</td><td>67,309</td></tr>
+          <tr><td><code>libero_goal</code></td><td>433</td><td>52,895</td></tr>
+          <tr><td><code>libero_10</code></td><td>388</td><td>104,280</td></tr>
+          <tr><td><strong>Total</strong></td><td>1,712</td><td>277,713</td></tr>
+        </tbody>
+      </table>
+      <p>4 GPU、batch=1 时，1 epoch 约为 70k optimizer steps；8 GPU、batch=1 时约为 35k steps。</p>
+      <pre><code>smoke: 100 steps
+pilot: 30k steps
+main: 70k steps on 4 GPUs, or 35k steps on 8 GPUs</code></pre>
+    </section>
+
+    <section id="preflight">
+      <h2>10. Preflight 检查</h2>
+      <ul>
+        <li>Hydra config resolve 通过，LoRA 字段默认关闭时旧配置不受影响。</li>
+        <li>release checkpoint 加载后，LoRA zero-init 模型 zero-update eval 应接近 <code>release_1</code>。</li>
+        <li>打印 trainable 参数分组，确认 video/proprio/action base 都冻结。</li>
+        <li>确认 eval 使用 A1 config，否则 LoRA 权重不会参与推理。</li>
+        <li>确认 <code>skip_padding_as_possible=true</code>，并继续使用 release dataset stats。</li>
+        <li>WandB 启用 A1 指标面板，指标含义见 <a href="meanflow_a1_wandb_metrics.html">WandB 指标说明页</a>。</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

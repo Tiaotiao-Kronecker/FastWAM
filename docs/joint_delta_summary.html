@@ -267,7 +267,7 @@
   <header>
     <div class="wrap">
       <h1>FastWAM Joint Delta MeanFlow 总结</h1>
-      <p class="subtitle">定义、实现方式、数据使用与当前实验结果，更新日期：2026-05-25</p>
+      <p class="subtitle">定义、实现方式、数据使用与当前实验结果，更新日期：2026-05-28</p>
     </div>
   </header>
 
@@ -296,16 +296,18 @@
           <span class="small">overall points</span>
         </div>
         <div>
-          <span class="small">相对 release_10</span>
-          <strong>-0.90</strong>
-          <span class="small">overall points</span>
+          <span class="small">RoboTwin quick clean20</span>
+          <strong>+1.80</strong>
+          <span class="small">points vs paired release_1</span>
         </div>
       </div>
       <div class="callout">
         <strong>核心判断：</strong>
         当前最可解释的成功因素不是训练更多 action expert 参数，而是尽量保留 release policy，
         只训练一个零初始化的 MeanFlow 区间条件器。这个设计在 <code>libero_10</code> 上比
-        <code>release_1</code> 高 1.40 points，但 full average 仍略低于 <code>release_10</code>。
+        <code>release_1</code> 高 1.40 points，LIBERO full average 基本打平 <code>release_1</code>；
+        RoboTwin 50-task clean20 quick eval 也有小幅正增益。但这些结果还没有达到
+        <code>release_10</code> 的整体上界，RoboTwin 也还不是 clean+random 的正式 100-episode readout。
       </div>
     </section>
 
@@ -363,7 +365,9 @@
       <p class="small">
         RoboTwin quick clean20 也验证过 release step gap：<code>release_1</code> 平均 92.50%，
         <code>release_10</code> 平均 97.50%，任务数 8，每任务 20 episodes。
-        当前 <code>joint_delta</code> 微调和正式 readout 主要在 LIBERO 上完成。
+        5/27-5/28 又补充了 RoboTwin <code>meanflow_1</code> 50-task clean20 quick eval：
+        paired <code>release_1</code> 为 72.20%，<code>meanflow_1</code> 为 74.00%。
+        当前正式 readout 仍主要看 LIBERO，RoboTwin 结果作为扩展 quick diagnostic。
       </p>
     </section>
 
@@ -1180,6 +1184,7 @@ data/robotwin2.0/
             </td>
             <td>
               release RoboTwin 权重与 quick baseline 使用；当前 <code>joint_delta</code> 结果尚未在 RoboTwin 上做正式复现。
+              目前已有 2k conditioner checkpoint 的 50-task clean20 quick eval，正式 clean+random readout 待补。
             </td>
           </tr>
         </tbody>
@@ -1201,6 +1206,15 @@ data/robotwin2.0/
         每个训练样本从动作 chunk 中随机采样一个 MeanFlow 区间 \(0\le r<t\le1\)，再构造 noisy action
         和 finite-difference target。由于只训练条件器，微调更像 release policy 的 interval-adapter，
         而不是一次完整 policy-body finetune。
+      </p>
+      <p>
+        RoboTwin 对应配置为
+        <code>configs/task/robotwin_one_step_meanflow_joint_conditioner_3cam_384_1e-4.yaml</code>，
+        同样使用 <code>trainable_scope=conditioner</code>、<code>conditioner_mode=joint_delta</code>、
+        <code>max_steps=2000</code>，从
+        <code>checkpoints/fastwam_release/robotwin_uncond_3cam_384.pt</code> 出发。
+        当前已评测的 checkpoint 是
+        <code>runs/robotwin_one_step_meanflow_joint_conditioner_3cam_384_1e-4/joint_cond_fd_2k_20260525_prefix2200/checkpoints/weights/step_002000.pt</code>。
       </p>
     </section>
 
@@ -1365,6 +1379,125 @@ data/robotwin2.0/
         上有明确提升；但它还没有达到 <code>release_10</code> 的整体水平，主要短板在 <code>libero_goal</code>。
       </div>
 
+      <h3>5/27-5/28 RoboTwin 50-task Quick Eval</h3>
+      <p>
+        RoboTwin 已有新的 MeanFlow quick eval 结果，记录在
+        <code>docs/worklog/2026-05-28-robotwin-meanflow-quick-eval-worklog.md</code>。
+        本地当前没有同步原始 <code>evaluate_results/robotwin_quick_one_step_compare/20260527_meanflow_jointdelta_50task_clean20</code>
+        目录，因此下表按 worklog 归档值整理。这个 run 只覆盖 clean phase，每任务 20 episodes，
+        用于判断是否值得做正式 clean+random 大评测。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>组别</th>
+            <th class="num">任务</th>
+            <th class="num">Rollouts</th>
+            <th class="num">Successes</th>
+            <th class="num">Mean success</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>release_1</code></td>
+            <td class="num">50 / 50</td>
+            <td class="num">1000</td>
+            <td class="num">722</td>
+            <td class="num">72.20</td>
+            <td>paired baseline，同一 clean20 scope。</td>
+          </tr>
+          <tr>
+            <td><code>meanflow_1</code></td>
+            <td class="num">50 / 50</td>
+            <td class="num">1000</td>
+            <td class="num">740</td>
+            <td class="num">74.00</td>
+            <td><code>joint_delta step_002000</code>，1-step inference。</td>
+          </tr>
+          <tr>
+            <td><code>meanflow_1 - release_1</code></td>
+            <td class="num">-</td>
+            <td class="num">-</td>
+            <td class="num">+18</td>
+            <td class="num">+1.80</td>
+            <td>20 tasks improved, 14 equal, 16 worse。</td>
+          </tr>
+        </tbody>
+      </table>
+      <table>
+        <thead>
+          <tr>
+            <th>正向 tail</th>
+            <th class="num">Release</th>
+            <th class="num">MeanFlow</th>
+            <th class="num">Delta</th>
+            <th>负向 tail</th>
+            <th class="num">Release</th>
+            <th class="num">MeanFlow</th>
+            <th class="num">Delta</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>scan_object</code></td>
+            <td class="num">25.00</td>
+            <td class="num">85.00</td>
+            <td class="num">+60.00</td>
+            <td><code>handover_mic</code></td>
+            <td class="num">85.00</td>
+            <td class="num">35.00</td>
+            <td class="num">-50.00</td>
+          </tr>
+          <tr>
+            <td><code>put_object_cabinet</code></td>
+            <td class="num">25.00</td>
+            <td class="num">55.00</td>
+            <td class="num">+30.00</td>
+            <td><code>dump_bin_bigbin</code></td>
+            <td class="num">95.00</td>
+            <td class="num">70.00</td>
+            <td class="num">-25.00</td>
+          </tr>
+          <tr>
+            <td><code>move_can_pot</code></td>
+            <td class="num">40.00</td>
+            <td class="num">70.00</td>
+            <td class="num">+30.00</td>
+            <td><code>pick_diverse_bottles</code></td>
+            <td class="num">100.00</td>
+            <td class="num">75.00</td>
+            <td class="num">-25.00</td>
+          </tr>
+          <tr>
+            <td><code>place_fan</code></td>
+            <td class="num">30.00</td>
+            <td class="num">55.00</td>
+            <td class="num">+25.00</td>
+            <td><code>open_laptop</code></td>
+            <td class="num">90.00</td>
+            <td class="num">75.00</td>
+            <td class="num">-15.00</td>
+          </tr>
+          <tr>
+            <td><code>beat_block_hammer</code></td>
+            <td class="num">70.00</td>
+            <td class="num">95.00</td>
+            <td class="num">+25.00</td>
+            <td><code>rotate_qrcode</code></td>
+            <td class="num">75.00</td>
+            <td class="num">60.00</td>
+            <td class="num">-15.00</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <strong>RoboTwin 解读：</strong>
+        quick eval 的 paired mean 是小幅正增益，不是 collapse；但正负 tail 都很大。
+        在正式报告前需要复查 <code>handover_mic</code>、<code>dump_bin_bigbin</code>、
+        <code>pick_diverse_bottles</code> 与 <code>scan_object</code> 等任务，确认差异不是 clean20 的抽样波动或 simulator 状态差异。
+      </div>
+
       <h3>Latency 观察</h3>
       <table>
         <thead>
@@ -1408,7 +1541,7 @@ data/robotwin2.0/
         <li>把 <code>joint_delta step_002000</code> 作为当前 MeanFlow 候选 checkpoint，不再优先推进 full action expert 微调。</li>
         <li>正式报告时同时列 <code>release_1</code>、<code>joint_delta_1</code>、<code>release_10</code>，避免只和 10-step 上界比或只和 1-step baseline 比。</li>
         <li>下一步应重点诊断 <code>libero_goal</code> 下降，尤其是低成功率 task，例如 goal_5 和 goal_9。</li>
-        <li>RoboTwin 上还没有对应的 <code>joint_delta</code> 正式微调与评测，不能把 LIBERO 结论直接外推。</li>
+        <li>RoboTwin 已有 50-task clean20 quick eval，结论是小幅优于 paired <code>release_1</code>；下一步需要 clean+random、100 episodes/task 的正式 readout。</li>
       </ul>
       <h3>参考路径</h3>
       <ul>
@@ -1417,6 +1550,8 @@ data/robotwin2.0/
         <li><code>evaluate_results/libero/mf_jointcond_step2000_full4suite_50trials_20260525/summary.csv</code></li>
         <li><code>evaluate_results/libero/release_baseline_20260512_steps1/summary.csv</code></li>
         <li><code>evaluate_results/libero/release_baseline_20260512_steps10_v2/summary.csv</code></li>
+        <li><code>docs/worklog/2026-05-28-robotwin-meanflow-quick-eval-worklog.md</code></li>
+        <li><code>evaluate_results/robotwin_quick_one_step_compare/20260527_meanflow_jointdelta_50task_clean20/summary.csv</code>（结果路径由 worklog 归档；当前本地未同步原始目录）</li>
       </ul>
     </section>
   </main>

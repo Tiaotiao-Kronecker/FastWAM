@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FastWAM MeanFlow A1 WandB 指标说明</title>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --paper: #ffffff;
+      --ink: #172033;
+      --muted: #596579;
+      --line: #dfe5ee;
+      --accent: #1769aa;
+      --accent-soft: #e8f2fb;
+      --good: #18794e;
+      --warn: #a15c00;
+      --bad: #b42318;
+      --code: #102a43;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif;
+    }
+    header {
+      background: #0f2438;
+      color: #fff;
+      padding: 40px 24px 30px;
+      border-bottom: 1px solid #0b1b2b;
+    }
+    .wrap, main { max-width: 1120px; margin: 0 auto; }
+    main { padding: 24px 24px 56px; }
+    h1 { margin: 0 0 10px; font-size: 32px; line-height: 1.2; letter-spacing: 0; }
+    h2 { margin: 0 0 14px; font-size: 22px; line-height: 1.3; letter-spacing: 0; }
+    h3 { margin: 22px 0 10px; font-size: 17px; line-height: 1.35; letter-spacing: 0; }
+    p { margin: 10px 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    nav {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 18px;
+    }
+    nav a { display: inline-block; margin: 4px 14px 4px 0; font-weight: 650; }
+    section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 22px;
+      margin: 18px 0;
+    }
+    .subtitle { margin: 0; color: #c7d8e8; font-size: 16px; }
+    .muted { color: var(--muted); }
+    .callout {
+      border: 1px solid #bfdbfe;
+      background: var(--accent-soft);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin: 14px 0;
+    }
+    .warn { border-color: #f6d58b; background: #fff8e8; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin: 12px 0 18px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      vertical-align: top;
+      text-align: left;
+      overflow-wrap: anywhere;
+    }
+    th { background: #eef3f9; font-weight: 650; }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      color: var(--code);
+    }
+    code {
+      background: #eef3f9;
+      border: 1px solid #dfe5ee;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-size: 0.92em;
+    }
+    pre {
+      background: #0f172a;
+      color: #e5edf6;
+      border-radius: 10px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    pre code { color: inherit; background: transparent; border: 0; padding: 0; }
+    .tag {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      line-height: 1.5;
+      font-weight: 650;
+      background: #eef3f9;
+      color: #344054;
+      border: 1px solid #d7dee8;
+    }
+    .tag.good { color: var(--good); background: #ecfdf3; border-color: #abefc6; }
+    .tag.warn { color: var(--warn); background: #fff8e8; border-color: #f6d58b; }
+    .tag.bad { color: var(--bad); background: #fef3f2; border-color: #fecdca; }
+    ul { margin: 8px 0 12px 22px; padding: 0; }
+    li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>FastWAM MeanFlow A1 WandB 指标说明</h1>
+      <p class="subtitle">解释 A1 Action-LoRA MeanFlow 训练中 WandB 配置项、训练曲线、参数/梯度分组、动作曲线和评估 artifact 的含义。</p>
+    </div>
+  </header>
+
+  <main>
+    <nav>
+      <a href="#enable">启用方式</a>
+      <a href="#run-config">A1 Config</a>
+      <a href="#loss">Loss 指标</a>
+      <a href="#meanflow">MeanFlow 诊断</a>
+      <a href="#params">参数与梯度</a>
+      <a href="#data">数据与性能</a>
+      <a href="#artifacts">可视化 Artifact</a>
+      <a href="#patterns">异常模式</a>
+      <a href="meanflow_action_lora_a1.html">A1 LoRA 方案页</a>
+    </nav>
+
+    <section id="enable">
+      <h2>1. WandB 配置项</h2>
+      <pre><code>wandb:
+  enabled: true
+  workspace: null
+  project: fast-wam
+  group: meanflow-a1
+  name: a1-lora4-jointdelta-eqanchor0.1-70k
+  mode: online</code></pre>
+      <table>
+        <thead>
+          <tr>
+            <th>字段</th>
+            <th>含义</th>
+            <th>建议</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>enabled</code></td>
+            <td>是否启用 WandB。</td>
+            <td>A1 主实验启用；smoke 可关闭。</td>
+          </tr>
+          <tr>
+            <td><code>workspace</code></td>
+            <td>WandB entity。为 <code>null</code> 时使用本地默认账号。</td>
+            <td>多人协作时填团队 workspace。</td>
+          </tr>
+          <tr>
+            <td><code>project</code></td>
+            <td>WandB project 名。</td>
+            <td>固定为 <code>fast-wam</code>。</td>
+          </tr>
+          <tr>
+            <td><code>group</code></td>
+            <td>实验组，用于聚合同一系列 ablation。</td>
+            <td>A1 使用 <code>meanflow-a1</code>。</td>
+          </tr>
+          <tr>
+            <td><code>name</code></td>
+            <td>单次 run 名。</td>
+            <td>包含 rank、conditioner、anchor、steps 等关键信息。</td>
+          </tr>
+          <tr>
+            <td><code>mode</code></td>
+            <td><code>online</code> 直接上传，<code>offline</code> 本地缓存。</td>
+            <td>集群网络不稳时用 <code>offline</code>。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="run-config">
+      <h2>2. A1 Run Config 参数含义</h2>
+      <p>
+        这些字段应该随 run 一起写入 WandB config，方便之后按 conditioner、LoRA rank、anchor 强度和数据规模筛选实验。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>WandB config key</th>
+            <th>含义</th>
+            <th>A1 主线建议</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>model.one_step_meanflow.objective</code></td>
+            <td>MeanFlow target 的实现方式。</td>
+            <td><code>finite_difference</code>，保持与现有 C/D 实现兼容。</td>
+          </tr>
+          <tr>
+            <td><code>model.one_step_meanflow.conditioner_mode</code></td>
+            <td>interval conditioner 输入形式。</td>
+            <td><code>joint_delta</code>，同时给模型 \(t\) 和 \(t-r\)。</td>
+          </tr>
+          <tr>
+            <td><code>model.one_step_meanflow.trainable_scope</code></td>
+            <td>允许训练的模块集合。</td>
+            <td><code>conditioner_head_lora</code>，防止误开 full action body。</td>
+          </tr>
+          <tr>
+            <td><code>model.one_step_meanflow.freeze_video_expert</code></td>
+            <td>是否冻结 video expert。</td>
+            <td><code>true</code>，保持视觉 token 和 video cache 语义不变。</td>
+          </tr>
+          <tr>
+            <td><code>model.one_step_meanflow.train_proprio_encoder</code></td>
+            <td>是否训练 proprio encoder。</td>
+            <td><code>false</code>，避免状态编码漂移影响 release policy。</td>
+          </tr>
+          <tr>
+            <td><code>model.one_step_meanflow.derivative_epsilon</code></td>
+            <td>finite-difference 估计 \(\partial u/\partial t\) 的扰动大小。</td>
+            <td><code>0.05</code> 起步；过小噪声大，过大近似偏。</td>
+          </tr>
+          <tr>
+            <td><code>model.one_step_meanflow.equal_time_anchor_prob</code></td>
+            <td>执行 \(r=t\) velocity anchor branch 的概率。</td>
+            <td><code>0.25</code> 起步，用来守住小 interval 边界。</td>
+          </tr>
+          <tr>
+            <td><code>model.one_step_meanflow.lora_rank</code></td>
+            <td>LoRA 低秩维度 \(r\)。</td>
+            <td><code>4</code>；作为容量和稳定性的第一折中点。</td>
+          </tr>
+          <tr>
+            <td><code>model.one_step_meanflow.lora_alpha</code></td>
+            <td>LoRA scale 中的 \(\alpha\)。实际 scale 为 \(\alpha/r\)。</td>
+            <td><code>4</code>，让初始有效 scale 约为 1。</td>
+          </tr>
+          <tr>
+            <td><code>model.one_step_meanflow.lora_target_modules</code></td>
+            <td>安装 LoRA 的 action expert 线性层列表。</td>
+            <td>优先 q/v/o、cross-attn q/o 和 FFN output；不装 video expert。</td>
+          </tr>
+          <tr>
+            <td><code>loss.lambda_equal_time_velocity</code></td>
+            <td>equal-time anchor 的 loss 权重。</td>
+            <td><code>0.1</code> 起步；太大可能把大 interval 拉回 flow matching。</td>
+          </tr>
+          <tr>
+            <td><code>max_steps</code></td>
+            <td>optimizer step 数。</td>
+            <td>4 GPU batch=1 主实验约 <code>70000</code>；8 GPU 约 <code>35000</code>。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="loss">
+      <h2>3. Loss 曲线</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>WandB key</th>
+            <th>含义</th>
+            <th>健康趋势</th>
+            <th>异常信号</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>train/loss</code></td>
+            <td>总 loss，包含 MeanFlow 主目标和 equal-time anchor。</td>
+            <td>平稳下降，无尖峰爆炸。</td>
+            <td>下降但 rollout 失败，说明 loss 与闭环行为脱钩。</td>
+          </tr>
+          <tr>
+            <td><code>train/loss_meanflow_target</code></td>
+            <td>finite-difference MeanFlow target MSE。</td>
+            <td>主下降曲线。</td>
+            <td>长期不降可能容量不足或 LR 太低。</td>
+          </tr>
+          <tr>
+            <td><code>train/loss_equal_time_velocity</code></td>
+            <td><code>r=t</code> branch 上 \(u_\theta\) 对齐瞬时 flow velocity 的 loss。</td>
+            <td>不应长期高于主 loss 太多。</td>
+            <td>高企说明 LoRA/head 破坏了小 interval velocity。</td>
+          </tr>
+          <tr>
+            <td><code>train/loss_action_velocity</code></td>
+            <td>旧全 interval velocity auxiliary。</td>
+            <td>A1 中应为 0 或不存在。</td>
+            <td>非零表示配置误开，可能把 MeanFlow 拉回普通 flow matching。</td>
+          </tr>
+          <tr>
+            <td><code>train/loss_action_endpoint</code></td>
+            <td>旧 endpoint auxiliary。</td>
+            <td>A1 中应为 0 或不存在。</td>
+            <td>随机 \(r&gt;0\) 时误用可能引入错误监督。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="meanflow">
+      <h2>4. MeanFlow 变量诊断</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>WandB key</th>
+            <th>含义</th>
+            <th>用途</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>train/meanflow_sigma_start</code></td>
+            <td>batch 中 sampled \(r\) 的均值。</td>
+            <td>确认 \(r\) 分布正常。</td>
+          </tr>
+          <tr>
+            <td><code>train/meanflow_sigma_end</code></td>
+            <td>batch 中 sampled \(t\) 的均值。</td>
+            <td>确认 \(t\) 分布正常。</td>
+          </tr>
+          <tr>
+            <td><code>train/meanflow_interval</code></td>
+            <td>\(t-r\) 的均值。</td>
+            <td>如果长期过小，训练会偏向普通 flow matching；如果过大，finite-difference target 更难。</td>
+          </tr>
+          <tr>
+            <td><code>train/meanflow_dudt_rms</code></td>
+            <td>finite-difference 估计的 \(\partial u/\partial t\) RMS。</td>
+            <td>过大可能表示 target 不稳定或 LoRA 更新过猛。</td>
+          </tr>
+          <tr>
+            <td><code>train/pred_mean_velocity_rms</code></td>
+            <td>模型预测平均速度 RMS。</td>
+            <td>用于观察 action scale 是否漂移。</td>
+          </tr>
+          <tr>
+            <td><code>train/target_meanflow_rms</code></td>
+            <td>MeanFlow target RMS。</td>
+            <td>与 pred RMS 对比判断 scale mismatch。</td>
+          </tr>
+          <tr>
+            <td><code>train/equal_time_anchor_applied</code></td>
+            <td>当前 log 窗口是否执行了 equal-time anchor branch。</td>
+            <td>确认 <code>equal_time_anchor_prob</code> 生效。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="params">
+      <h2>5. 参数与梯度分组</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>WandB key</th>
+            <th>含义</th>
+            <th>判断</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>params/trainable_total</code></td>
+            <td>总可训练参数量。</td>
+            <td>用于确认没有误放开 full action body。</td>
+          </tr>
+          <tr>
+            <td><code>params/trainable_lora</code></td>
+            <td>LoRA 参数量。</td>
+            <td>rank/layer 配置是否符合预期。</td>
+          </tr>
+          <tr>
+            <td><code>params/trainable_conditioner</code></td>
+            <td>joint-delta conditioner 参数量。</td>
+            <td>应包含 <code>meanflow_joint_time_embedding</code> 和 <code>meanflow_joint_time_projection</code>。</td>
+          </tr>
+          <tr>
+            <td><code>params/trainable_head</code></td>
+            <td>action head 参数量。</td>
+            <td>确认 head 解冻。</td>
+          </tr>
+          <tr>
+            <td><code>grad_norm/lora</code></td>
+            <td>LoRA 参数梯度范数。</td>
+            <td>过大说明 adapter 正在强行改 release policy；长期为 0 说明 LoRA 未参与训练。</td>
+          </tr>
+          <tr>
+            <td><code>grad_norm/conditioner</code></td>
+            <td>conditioner 梯度范数。</td>
+            <td>判断 interval conditioner 是否承担主要学习。</td>
+          </tr>
+          <tr>
+            <td><code>grad_norm/head</code></td>
+            <td>action head 梯度范数。</td>
+            <td>过大可能导致 action scale 漂移。</td>
+          </tr>
+          <tr>
+            <td><code>train/grad_norm</code></td>
+            <td>全局梯度范数。</td>
+            <td>用于发现整体数值不稳定。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="data">
+      <h2>6. 数据、学习率与性能指标</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>WandB key</th>
+            <th>含义</th>
+            <th>用途</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>train/lr</code></td>
+            <td>当前学习率。</td>
+            <td>确认 warmup/cosine schedule 正常。</td>
+          </tr>
+          <tr>
+            <td><code>performance/steps_per_sec</code></td>
+            <td>optimizer steps per second。</td>
+            <td>估算 30k/70k run 的耗时。</td>
+          </tr>
+          <tr>
+            <td><code>performance/samples_per_sec</code></td>
+            <td>全局 samples per second。</td>
+            <td>等于 steps/s × batch × world size。</td>
+          </tr>
+          <tr>
+            <td><code>data/pad_retry_rate</code></td>
+            <td>启用 <code>skip_padding_as_possible</code> 后替换 padding window 的比例。</td>
+            <td>高比例表示 episode 边界/padding 影响较大。</td>
+          </tr>
+          <tr>
+            <td><code>data/action_pad_fraction</code></td>
+            <td>batch 中 action padding token 比例。</td>
+            <td>A1 期望尽量低。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <code>data/*</code> 指标需要在 dataset 或 collate 侧补充返回统计；第一版至少应通过离线数据 audit 确认 padding 比例。
+      </div>
+    </section>
+
+    <section id="artifacts">
+      <h2>7. 可视化 Artifact</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Artifact</th>
+            <th>内容</th>
+            <th>用途</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>eval/video</code></td>
+            <td>已有 eval MP4，展示 pred / VAE recon / GT 拼接。</td>
+            <td>发现视觉路径或动作 rollout 明显异常。</td>
+          </tr>
+          <tr>
+            <td><code>eval/action_curve_pred_vs_gt</code></td>
+            <td>固定 diagnostic batch 上 7 维 action 曲线：xyz、rot、gripper。</td>
+            <td>观察 gripper timing 和 action phase 是否漂移。</td>
+          </tr>
+          <tr>
+            <td><code>eval/action_curve_endpoint</code></td>
+            <td>从 \(t=1,r=0\) one-step endpoint 还原出的动作曲线。</td>
+            <td>判断推理路径是否与训练 loss 对齐。</td>
+          </tr>
+          <tr>
+            <td><code>eval/trace_summary_table</code></td>
+            <td>action trace summary：first close、close ratio、transition count、episode length。</td>
+            <td>rollout 成败背后的动作相位诊断。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="patterns">
+      <h2>8. 常见异常模式</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>现象</th>
+            <th>可能原因</th>
+            <th>处理</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>loss_meanflow_target</code> 下降，但 rollout 不涨。</td>
+            <td>MeanFlow target 与闭环 action phase 脱钩。</td>
+            <td>看 action curve 与 trace summary；考虑加强 equal-time 或加入 r=0 endpoint ablation。</td>
+          </tr>
+          <tr>
+            <td><code>loss_equal_time_velocity</code> 高或震荡。</td>
+            <td>LoRA/head 破坏小 interval release velocity。</td>
+            <td>降低 LR、降低 LoRA rank、增加 anchor probability。</td>
+          </tr>
+          <tr>
+            <td><code>grad_norm/lora</code> 远大于其他组。</td>
+            <td>LoRA 在强行重写 action policy。</td>
+            <td>降低 LoRA LR 或 rank；必要时改 last-layer/head-only ablation。</td>
+          </tr>
+          <tr>
+            <td>gripper transition 过多或长期不 close。</td>
+            <td>任务相位和 gripper timing 漂移。</td>
+            <td>优先看 action trace，不要只看训练 loss。</td>
+          </tr>
+          <tr>
+            <td>zero-update eval 低于 release_1。</td>
+            <td>LoRA wrapper 或 joint-delta 初始化破坏 release。</td>
+            <td>停训，检查 checkpoint load 和 zero-init。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>

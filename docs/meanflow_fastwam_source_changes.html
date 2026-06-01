@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>FastWAM One-Step / MeanFlow 源码改动汇总</title>
+  <title>FastWAM One-Step / MeanFlow 历史源码改动归档</title>
   <style>
     :root {
       --bg: #f7f8fa;
@@ -152,8 +152,8 @@
 </head>
 <body>
   <header>
-    <h1>FastWAM One-Step / MeanFlow 源码改动汇总</h1>
-    <p>本页按方案整理当前工作树中为了 one-step、shortcut、MeanFlow 及其评测诊断对 FastWAM 代码做过的改动。重点是“改了哪些源码文件、每个改动服务于哪个方案、训练/推理/评测路径如何接上”。</p>
+    <h1>FastWAM One-Step / MeanFlow 历史源码改动归档</h1>
+    <p>本页按方案整理当前工作树中为了 one-step、shortcut、MeanFlow 及其评测诊断对 FastWAM 代码做过的历史改动。新的 A1 Action-LoRA 方案已拆到独立归档页。</p>
     <p class="small">生成日期：2026-05-20。当前仓库处于 dirty worktree，本页反映的是本地代码状态，不是上游发布版本。</p>
   </header>
 
@@ -169,7 +169,22 @@
       <a href="#eval">评测诊断</a>
       <a href="#file-index">文件索引</a>
       <a href="#status">结论状态</a>
+      <a href="meanflow_action_lora_a1.html">A1 Action-LoRA</a>
+      <a href="meanflow_a1_wandb_metrics.html">A1 WandB 指标</a>
     </nav>
+
+    <section id="new-a1-docs">
+      <h2>新的 A1 Action-LoRA 归档入口</h2>
+      <p>
+        当前页面保留为历史源码改动汇总。新的 action-only MeanFlow 方案使用
+        <code>joint_delta</code> interval conditioner、action head、Action-LoRA 和 equal-time velocity anchor，
+        已独立整理为：
+      </p>
+      <ul>
+        <li><a href="meanflow_action_lora_a1.html"><code>meanflow_action_lora_a1.html</code></a>：A1 Action-LoRA 数学原理、代码实现计划、配置、训练与 preflight。</li>
+        <li><a href="meanflow_a1_wandb_metrics.html"><code>meanflow_a1_wandb_metrics.html</code></a>：WandB 配置项和训练/评估指标含义说明。</li>
+      </ul>
+    </section>
 
     <section id="matrix">
       <h2>方案总览</h2>
