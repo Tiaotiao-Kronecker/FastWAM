@@ -164,6 +164,31 @@ def _center_crop_resize(image: np.ndarray, width: int, height: int) -> np.ndarra
     return np.asarray(cropped, dtype=np.uint8)
 
 
+def _manual_render_libero_image(env, resolution: int = LIBERO_ENV_RESOLUTION) -> dict[str, np.ndarray]:
+    """Render LIBERO policy cameras on demand when camera obs are disabled."""
+    image = env.sim.render(
+        camera_name="agentview",
+        width=resolution,
+        height=resolution,
+    )
+    wrist_image = env.sim.render(
+        camera_name="robot0_eye_in_hand",
+        width=resolution,
+        height=resolution,
+    )
+    return {
+        "image": np.ascontiguousarray(image[::-1, ::-1]),
+        "wrist_image": np.ascontiguousarray(wrist_image[::-1, ::-1]),
+    }
+
+
+def _get_eval_libero_image(obs: dict, env, cfg: DictConfig) -> dict[str, np.ndarray]:
+    if bool(cfg.EVALUATION.get("lazy_camera_obs", False)):
+        resolution = int(cfg.EVALUATION.get("manual_camera_resolution", LIBERO_ENV_RESOLUTION))
+        return _manual_render_libero_image(env, resolution=resolution)
+    return get_libero_image(obs)
+
+
 def _normalize_proprio(
     proprio: np.ndarray,
     processor: FastWAMProcessor,
@@ -189,8 +214,10 @@ def _obs_to_model_input(
     height: int,
     device: str,
     dtype: torch.dtype,
+    imgs: Optional[dict[str, np.ndarray]] = None,
 ):
-    imgs = get_libero_image(obs)
+    if imgs is None:
+        imgs = get_libero_image(obs)
     image_meta = processor.shape_meta["images"]
     if len(image_meta) < int(processor.num_output_cameras):
         raise ValueError(
@@ -370,6 +397,7 @@ def _compute_clip_mean_psnr(
 
 def _predict_action_chunk(
     obs: dict,
+    env,
     task_description: str,
     model: torch.nn.Module,
     processor: FastWAMProcessor,
@@ -388,6 +416,7 @@ def _predict_action_chunk(
     prompt_template = DEFAULT_PROMPT
     prompt = prompt_template.format(task=task_description)
 
+    imgs = _get_eval_libero_image(obs, env, cfg)
     image, proprio, imgs = _obs_to_model_input(
         obs,
         cfg=cfg,
@@ -396,6 +425,7 @@ def _predict_action_chunk(
         height=input_h,
         device=model_device,
         dtype=model.torch_dtype,
+        imgs=imgs,
     )
 
     infer_kwargs = {
@@ -608,6 +638,32 @@ def _write_action_trace(
         json.dump(trace, f, indent=2, cls=NumpyEncoder)
 
 
+def _write_partial_action_trace(
+    action_trace_dir: Path,
+    cfg: DictConfig,
+    episode_idx: int,
+    trace: dict[str, Any],
+    *,
+    reason: str,
+    env_t: int,
+) -> None:
+    action_trace_dir.mkdir(parents=True, exist_ok=True)
+    trace = dict(trace)
+    trace["partial"] = True
+    trace["partial_flush_reason"] = reason
+    trace["partial_flush_env_t"] = int(env_t)
+    trace["summary"] = _summarize_action_array(
+        [record["action"] for record in trace.get("executed_policy_actions", [])]
+    )
+    output_file = action_trace_dir / (
+        f"task{cfg.EVALUATION.task_id}_trial{episode_idx}_partial_action_trace.json"
+    )
+    tmp_file = output_file.with_suffix(output_file.suffix + ".tmp")
+    with open(tmp_file, "w", encoding="utf-8") as f:
+        json.dump(trace, f, indent=2, cls=NumpyEncoder)
+    os.replace(tmp_file, output_file)
+
+
 def run_single_episode(
     env,
     initial_state,
@@ -621,6 +677,7 @@ def run_single_episode(
     input_w: int,
     input_h: int,
     model_device: str,
+    action_trace_dir: Path,
 ) -> tuple[bool, list, list[dict[str, Any]], Optional[float], Optional[dict[str, Any]]]:
     max_steps = _get_max_steps(cfg.EVALUATION.task_suite_name)
     replan_steps = int(cfg.EVALUATION.get("replan_steps", 5))
@@ -629,9 +686,12 @@ def run_single_episode(
     visualize_future_video = bool(cfg.EVALUATION.get("visualize_future_video", False))
     save_action_trace = bool(cfg.EVALUATION.get("save_action_trace", False))
     save_raw_action_trace = bool(cfg.EVALUATION.get("save_raw_action_trace", save_action_trace))
+    collect_rollout_images = bool(cfg.EVALUATION.get("save_rollout_video", True))
+    flush_action_trace_each_step = bool(cfg.EVALUATION.get("flush_action_trace_each_step", False))
     diagnose_action_values = bool(cfg.EVALUATION.get("diagnose_action_values", False))
     action_abs_limit_cfg = cfg.EVALUATION.get("diagnose_action_abs_limit", None)
     action_abs_limit = float(action_abs_limit_cfg) if action_abs_limit_cfg is not None else None
+    cuda_sync_after_replan = bool(cfg.EVALUATION.get("cuda_sync_after_replan", False))
     capture_steps = set(_get_future_frame_capture_steps(cfg)[1:])
     action_trace = None
     if save_action_trace:
@@ -664,6 +724,12 @@ def run_single_episode(
     t = 0
     done = False
     pbar = tqdm(total=max_steps + num_steps_wait, desc=f"Episode {episode_idx + 1}")
+
+    def _maybe_sync_after_replan() -> None:
+        if not cuda_sync_after_replan or not str(model_device).startswith("cuda"):
+            return
+        torch.cuda.synchronize(torch.device(model_device))
+
     while t < max_steps + num_steps_wait:
         pbar.update(1)
         if t < num_steps_wait:
@@ -677,6 +743,7 @@ def run_single_episode(
         if len(pending_actions) == 0:
             action_chunk, imgs, predicted_future_frames, action_stages = _predict_action_chunk(
                 obs=obs,
+                env=env,
                 task_description=task_description,
                 model=model,
                 processor=processor,
@@ -686,6 +753,7 @@ def run_single_episode(
                 input_h=input_h,
                 model_device=model_device,
             )
+            _maybe_sync_after_replan()
             if predicted_future_frames is not None:
                 current_replan_idx += 1
                 current_predicted_future_clip = {
@@ -718,10 +786,12 @@ def run_single_episode(
                         for stage_name, stage_actions in action_stages.items()
                     }
                 action_trace["replans"].append(replan_record)
-            replay_images.append(imgs.copy())
+            if collect_rollout_images:
+                replay_images.append(imgs.copy())
         else:
-            imgs = get_libero_image(obs)
-            replay_images.append(imgs.copy())
+            if collect_rollout_images:
+                imgs = _get_eval_libero_image(obs, env, cfg)
+                replay_images.append(imgs.copy())
 
         action_idx_in_replan = int(replan_steps - len(pending_actions))
         executed_action = pending_actions.pop(0)
@@ -748,6 +818,15 @@ def run_single_episode(
                 if action_trace is not None:
                     action_trace.setdefault("diagnostics", []).append(diagnostic_record)
                     action_trace["invalid_action_failure"] = diagnostic_record
+                    if flush_action_trace_each_step:
+                        _write_partial_action_trace(
+                            action_trace_dir=action_trace_dir,
+                            cfg=cfg,
+                            episode_idx=episode_idx,
+                            trace=action_trace,
+                            reason="invalid_action_before_env_step",
+                            env_t=t,
+                        )
                 pbar.close()
                 return False, replay_images, predicted_future_video_clips, None, action_trace
         if action_trace is not None:
@@ -765,11 +844,20 @@ def run_single_episode(
                     if action_idx_in_replan < len(stage_actions)
                 }
             action_trace["executed_policy_actions"].append(executed_record)
+            if flush_action_trace_each_step:
+                _write_partial_action_trace(
+                    action_trace_dir=action_trace_dir,
+                    cfg=cfg,
+                    episode_idx=episode_idx,
+                    trace=action_trace,
+                    reason="before_env_step",
+                    env_t=t,
+                )
         obs, _, done, _ = env.step(executed_action)
         if visualize_future_video and current_predicted_future_clip is not None:
             current_replan_step += 1
             if current_replan_step in capture_steps:
-                current_predicted_future_clip["gt_frames"].append(get_libero_image(obs))
+                current_predicted_future_clip["gt_frames"].append(_get_eval_libero_image(obs, env, cfg))
             if done or len(pending_actions) == 0:
                 expected_frame_count = 1 + sum(
                     1 for capture_step in capture_steps if capture_step <= current_replan_step
@@ -843,7 +931,12 @@ def run_single_task(
     input_h: int,
     model_device: str,
 ) -> dict:
-    env, task_description = get_libero_env(task, LIBERO_ENV_RESOLUTION, cfg.get("seed"))
+    env, task_description = get_libero_env(
+        task,
+        LIBERO_ENV_RESOLUTION,
+        cfg.get("seed"),
+        use_camera_obs=not bool(cfg.EVALUATION.get("lazy_camera_obs", False)),
+    )
     visualize_future_video = bool(cfg.EVALUATION.get("visualize_future_video", False))
     results = {
         "successes": 0,
@@ -870,6 +963,7 @@ def run_single_task(
             input_w=input_w,
             input_h=input_h,
             model_device=model_device,
+            action_trace_dir=action_trace_dir,
         )
         if success:
             results["successes"] += 1
