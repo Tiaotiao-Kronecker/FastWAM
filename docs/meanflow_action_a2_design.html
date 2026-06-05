@@ -1,0 +1,1102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FastWAM MeanFlow A2 设计归档</title>
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['\\[', '\\]']] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --paper: #ffffff;
+      --ink: #172033;
+      --muted: #596579;
+      --line: #dfe5ee;
+      --accent: #1769aa;
+      --accent-soft: #e8f2fb;
+      --good: #18794e;
+      --warn: #a15c00;
+      --bad: #b42318;
+      --code: #102a43;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif;
+    }
+    header {
+      background: #0f2438;
+      color: #fff;
+      padding: 40px 24px 30px;
+      border-bottom: 1px solid #0b1b2b;
+    }
+    .wrap, main {
+      max-width: 1120px;
+      margin: 0 auto;
+    }
+    main { padding: 24px 24px 56px; }
+    h1 { margin: 0 0 10px; font-size: 32px; line-height: 1.2; letter-spacing: 0; }
+    h2 { margin: 0 0 14px; font-size: 22px; line-height: 1.3; letter-spacing: 0; }
+    h3 { margin: 22px 0 10px; font-size: 17px; line-height: 1.35; letter-spacing: 0; }
+    p { margin: 10px 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    nav {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 18px;
+    }
+    nav a { display: inline-block; margin: 4px 14px 4px 0; font-weight: 650; }
+    section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 22px;
+      margin: 18px 0;
+    }
+    .subtitle { margin: 0; color: #c7d8e8; font-size: 16px; }
+    .muted { color: var(--muted); }
+    .callout {
+      border: 1px solid #bfdbfe;
+      background: var(--accent-soft);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin: 14px 0;
+    }
+    .warn { border-color: #f6d58b; background: #fff8e8; }
+    .danger { border-color: #fecdca; background: #fef3f2; }
+    .formula {
+      border: 1px solid var(--line);
+      background: #fbfcff;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin: 12px 0;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin: 12px 0 18px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      vertical-align: top;
+      text-align: left;
+      overflow-wrap: anywhere;
+    }
+    th { background: #eef3f9; font-weight: 650; }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      color: var(--code);
+    }
+    code {
+      background: #eef3f9;
+      border: 1px solid #dfe5ee;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-size: 0.92em;
+    }
+    pre {
+      background: #0f172a;
+      color: #e5edf6;
+      border-radius: 10px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    pre code { color: inherit; background: transparent; border: 0; padding: 0; }
+    .tag {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      line-height: 1.5;
+      font-weight: 650;
+      background: #eef3f9;
+      color: #344054;
+      border: 1px solid #d7dee8;
+    }
+    .tag.good { color: var(--good); background: #ecfdf3; border-color: #abefc6; }
+    .tag.warn { color: var(--warn); background: #fff8e8; border-color: #f6d58b; }
+    .tag.bad { color: var(--bad); background: #fef3f2; border-color: #fecdca; }
+    ul { margin: 8px 0 12px 22px; padding: 0; }
+    li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>FastWAM MeanFlow A2 设计归档</h1>
+      <p class="subtitle">归档 TwinFlow / SplitMeanFlow / MeanFlowSE 讨论，并制定 A2：interval mixture + clipped finite-difference MeanFlow + action-only LoRA 的训练计划。</p>
+      <p class="subtitle">状态：设计计划归档；尚未进入代码实现。</p>
+    </div>
+  </header>
+
+  <main>
+    <nav>
+      <a href="#summary">结论摘要</a>
+      <a href="#a1">A1 诊断</a>
+      <a href="#meanflow">MeanFlow 公式</a>
+      <a href="#twinflow">TwinFlow 对齐</a>
+      <a href="#fake">Fake Velocity</a>
+      <a href="#related">相关实现</a>
+      <a href="#a2">A2 方案</a>
+      <a href="#loss">A2 Loss</a>
+      <a href="#config">配置草案</a>
+      <a href="#code-plan">代码计划</a>
+      <a href="#attribution-run">归因训练</a>
+      <a href="#training">训练与评测</a>
+      <a href="#monitor">监控指标</a>
+      <a href="#risks">风险与判据</a>
+      <a href="#refs">参考</a>
+      <a href="meanflow_action_lora_a1.html">A1 页面</a>
+    </nav>
+
+    <section id="summary">
+      <h2>1. 结论摘要</h2>
+      <div class="callout">
+        A2 不应作为一次“大杂烩”实验直接改动 objective、interval sampling、capacity、data weighting 和 endpoint loss。
+        设计上应拆成可归因的 ablation ladder：先验证 <strong>interval mixture</strong> 和 <strong>residual clipping</strong>，
+        再考虑 endpoint、困难任务上采样和 rank 8 扩容。
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>设计点</th>
+            <th>A2 采用方式</th>
+            <th>原因</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>归因原则</td>
+            <td><span class="tag good">A2-core 保持 A1 架构、数据、LoRA rank 和主要超参不变</span>；只逐步改变 interval sampling 与 residual target 稳定项。</td>
+            <td>如果性能变化，能知道来自 sampling、clipping、endpoint、数据权重还是容量。</td>
+          </tr>
+          <tr>
+            <td>Action-only 范围</td>
+            <td>继续冻结 video 和 proprio；训练 interval conditioner、action head、action LoRA/adapter。</td>
+            <td>避免破坏 release policy 的视觉和 proprio 对齐，同时给 action expert 足够容量表达平均速度场。</td>
+          </tr>
+          <tr>
+            <td>Interval mixture</td>
+            <td>作为单独 ablation：<code>A2-mix</code>；随后与 clipping 组合成 <code>A2-core</code>。</td>
+            <td>让训练同时覆盖部署 one-step、flow matching 局部锚点和一般 MeanFlow 区间。</td>
+          </tr>
+          <tr>
+            <td>Residual target</td>
+            <td>用 TwinFlow 风格的积分残差替代显式 JVP。</td>
+            <td>避免 action model 上昂贵且脆弱的 JVP，同时保留 MeanFlow 固定点。</td>
+          </tr>
+          <tr>
+            <td>Residual clipping</td>
+            <td>作为单独 ablation：<code>A2-clip</code>；随后与 interval mixture 组合成 <code>A2-core</code>。</td>
+            <td>控制自举 target 的噪声，防止 finite-difference 残差把模型拉飞。</td>
+          </tr>
+          <tr>
+            <td>fake/adv branch</td>
+            <td><span class="tag warn">暂不采用</span></td>
+            <td>它是 TwinFlow 的分布匹配扩展，不是标准 MeanFlow；机器人动作 fake 分布的语义风险更高。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="a1">
+      <h2>2. A1 结果与问题定位</h2>
+      <p>A1 使用 release checkpoint 初始化，冻结 video/proprio，训练 joint-delta interval conditioner、action head 和少量 action LoRA，并加入 equal-time velocity anchor。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>项</th>
+            <th>A1 当前设定</th>
+            <th>观察</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>可训练范围</td>
+            <td><code>conditioner_head_lora</code>，LoRA rank 4。</td>
+            <td>没有崩溃，说明 action-only 受控容量路线可行。</td>
+          </tr>
+          <tr>
+            <td>数据</td>
+            <td>full LIBERO no-noops four-suite 数据。</td>
+            <td>不是早期小数据 finetune 的问题。</td>
+          </tr>
+          <tr>
+            <td>Loss</td>
+            <td>random interval finite-difference MeanFlow + equal-time anchor。</td>
+            <td>训练 loss 已很低，但部分 LIBERO-10 任务仍弱，说明不是简单 underfit。</td>
+          </tr>
+          <tr>
+            <td>评测结构</td>
+            <td>A1 70k 整体约 <code>86.62%</code>；LIBERO-10 弱项集中在 task 4/6/9。</td>
+            <td>问题呈结构性：多物体空间关系、精准放置、长程末段修正。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        A1 的失败不像“没有学到任何 MeanFlow”，更像训练 interval 分布、rollout endpoint consistency 和困难任务数据权重没有充分服务 one-step 执行。
+      </div>
+    </section>
+
+    <section id="meanflow">
+      <h2>3. MeanFlow 的核心约束</h2>
+      <p>记动作插值路径为：</p>
+      <div class="formula">
+        \[
+        x_t = (1-t)a_0 + t\epsilon,\qquad v_t = \epsilon - a_0
+        \]
+      </div>
+      <p>MeanFlow 模型输出从 \(t\) 到 \(r\) 的平均速度：</p>
+      <div class="formula">
+        \[
+        u_\theta(x_t,r,t)\approx \frac{1}{t-r}\int_r^t v_s\,ds
+        \]
+      </div>
+      <p>总积分量为：</p>
+      <div class="formula">
+        \[
+        I_\theta(t,r)=(t-r)u_\theta(x_t,r,t)
+        \]
+      </div>
+      <p>标准 MeanFlow 的 JVP 形式来自：</p>
+      <div class="formula">
+        \[
+        \frac{d}{dt}I_\theta(t,r)=v_t
+        \]
+        \[
+        u_\theta + (t-r)\frac{d u_\theta}{dt}=v_t
+        \]
+        \[
+        u_{\mathrm{target}}=v_t-(t-r)\frac{d u_\theta}{dt}
+        \]
+      </div>
+      <p>官方 MeanFlow 和许多复现会直接用 JVP 估计 \(d u_\theta/dt\)。FastWAM 之前的 JVP pilot 也沿这条路尝试过，但在动作模型上代价高、实现脆弱、训练信号噪声较大。</p>
+    </section>
+
+    <section id="twinflow">
+      <h2>4. TwinFlow 如何对上 MeanFlow</h2>
+      <p>TwinFlow 可以理解为把上面的 JVP 目标改写成无显式 JVP 的 finite-difference residual。令模型输出：</p>
+      <div class="formula">
+        \[
+        F_\theta(x_t,t,tt)\approx u_\theta(x_t,tt,t)
+        \]
+      </div>
+      <p>总积分量为：</p>
+      <div class="formula">
+        \[
+        I_t=(t-tt)F_\theta(x_t,t,tt)
+        \]
+      </div>
+      <p>后退一个小步：</p>
+      <div class="formula">
+        \[
+        x_{t-\Delta t}=x_t-\Delta t\,v_t
+        \]
+        \[
+        I_{t-\Delta t}=(t-\Delta t-tt)F_\theta(x_{t-\Delta t},t-\Delta t,tt)
+        \]
+      </div>
+      <p>有限差分残差为：</p>
+      <div class="formula">
+        \[
+        R=\frac{I_t-I_{t-\Delta t}}{\Delta t}-v_t
+        \]
+      </div>
+      <p>展开可得：</p>
+      <div class="formula">
+        \[
+        R\approx F_\theta+(t-tt)\frac{dF_\theta}{dt}-v_t
+        \]
+        \[
+        R\approx F_\theta-\left(v_t-(t-tt)\frac{dF_\theta}{dt}\right)
+        \]
+      </div>
+      <p>因此：</p>
+      <div class="formula">
+        \[
+        F_\theta-R\approx v_t-(t-tt)\frac{dF_\theta}{dt}
+        \]
+      </div>
+      <p>这正是 MeanFlow 的 JVP target。所以 TwinFlow 的 residual target：</p>
+      <pre><code>target = stopgrad(F_theta - clip(residual))
+loss = mse(F_theta, target)</code></pre>
+      <p>本质上是无显式 JVP 的 MeanFlow 训练。区别是它用模型自己的相邻时间预测构造 residual，因此必须控制自举噪声。</p>
+    </section>
+
+    <section id="fake">
+      <h2>5. Fake Velocity 与 Adv 分支</h2>
+      <p>需要特别区分：TwinFlow 的 fake/adv 分支不是 MeanFlow 的必要组成部分。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>问题</th>
+            <th>澄清</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>为什么负时间代表 fake?</td>
+            <td>不是负号天然代表 fake。TwinFlow 人为把 real samples 送入正时间分支，把 model-generated fake samples 送入负时间分支。负时间只是复用 time embedding 的 domain label。</td>
+          </tr>
+          <tr>
+            <td>fake velocity 是什么?</td>
+            <td>它是当前模型生成分布 \(p_\theta\) 诱导出的 velocity field，而不是最终部署时要执行的动作速度。</td>
+          </tr>
+          <tr>
+            <td>它的作用是什么?</td>
+            <td>比较 <code>fake_v - real_v</code>，作为当前生成分布和真实数据分布之间的 correction signal，类似隐式 discriminator 或 score-difference。</td>
+          </tr>
+          <tr>
+            <td>FastWAM A2 是否采用?</td>
+            <td><span class="tag warn">第一版不采用</span>。机器人动作 fake sample 可能包含任务语义错误，直接训练 fake branch 可能强化错误动作分布。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        A2 的目标是先把 MeanFlow 主体训稳。fake/adv 可以作为 A3 的候选方向，但需要先设计动作级 fake sample 过滤、任务语义约束和 rollout failure 诊断。
+      </div>
+    </section>
+
+    <section id="related">
+      <h2>6. 相关实现对照</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>工作</th>
+            <th>MeanFlow 实现方式</th>
+            <th>Anchor / Consistency</th>
+            <th>对 FastWAM 的启发</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Official MeanFlow</td>
+            <td>显式 JVP，目标 \(v-(t-r)d u/dt\)。</td>
+            <td>大量 \(r=t\) diagonal/equal-time 样本；无 endpoint MSE。</td>
+            <td>理论基准清晰，但 action model 上 JVP 代价和工程风险较高。</td>
+          </tr>
+          <tr>
+            <td>SplitMeanFlow</td>
+            <td>区间拆分一致性，不直接算 JVP。</td>
+            <td>有 equal-time/boundary velocity anchor；主要 loss 是 interval splitting consistency。</td>
+            <td>说明 boundary/local anchor 与 MeanFlow 不矛盾，反而是稳定平均场的常见做法。</td>
+          </tr>
+          <tr>
+            <td>TwinFlow</td>
+            <td>finite-difference residual，近似 MeanFlow JVP target。</td>
+            <td>混合 e2e、local/mul、any interval；有 residual clipping；另有 fake/adv 分支。</td>
+            <td>A2 借鉴 interval mixture 和 clipping，暂不借鉴 fake/adv。</td>
+          </tr>
+          <tr>
+            <td>MeanFlowSE</td>
+            <td>支持 finite-difference JVP，常用 centered FD 和 JVP clipping。</td>
+            <td>混合 CFM/equal-time loss 与 MeanFlow，带 warmup。</td>
+            <td>说明 clipped finite-difference + local flow anchor 是可靠的工程组合。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="a2">
+      <h2>7. A2 方案定义</h2>
+      <div class="callout">
+        这里把 A2 拆成两层：<strong>A2 ablation ladder</strong> 用于归因，<strong>A2-core</strong> 是通过前两项 ablation 后的最小组合版。
+        Endpoint、hard-task upweight 和 rank 8 扩容不进入 A2-core，避免一次实验改动过多。
+      </div>
+      <h3>7.1 模型范围</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>模块</th>
+            <th>A2 策略</th>
+            <th>理由</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Video expert</td>
+            <td><span class="tag good">冻结</span></td>
+            <td>保留 release 视觉语义和 LIBERO/RoboTwin 泛化能力。</td>
+          </tr>
+          <tr>
+            <td>Proprio encoder</td>
+            <td><span class="tag good">冻结</span></td>
+            <td>旧 action-only 经验显示 proprio 放开容易改变状态语义；A2 先避免引入新漂移源。</td>
+          </tr>
+          <tr>
+            <td>Interval conditioner</td>
+            <td>训练；保留 <code>joint_delta</code> 作为默认。</td>
+            <td>需要把 \(r,t,t-r\) 信息显式注入 action expert。</td>
+          </tr>
+          <tr>
+            <td>Action head</td>
+            <td>训练。</td>
+            <td>输出 readout 需要从 instantaneous velocity 转向 interval average velocity。</td>
+          </tr>
+          <tr>
+            <td>Action LoRA/adapter</td>
+            <td><span class="tag good">A2-core 保持 rank 4 和 A1 target modules</span>；rank 8 放到 <code>A2-capacity</code>。</td>
+            <td>A1 rank 4 已经可用。若同时改 rank，很难判断收益来自 MeanFlow target 还是容量。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>7.2 Ablation Ladder</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>实验名</th>
+            <th>相对 A1 只改什么</th>
+            <th>保持不变</th>
+            <th>回答的问题</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>A1-control</code></td>
+            <td>无；复现实验或直接使用 A1 70k。</td>
+            <td>所有 A1 设定。</td>
+            <td>给同一评测脚本和同一资源环境下的 baseline。</td>
+          </tr>
+          <tr>
+            <td><code>A2-clip</code></td>
+            <td>只加 residual clipping；interval sampling 仍沿用 A1 random。</td>
+            <td>rank 4、数据、lr、endpoint=0、equal-time anchor。</td>
+            <td>自举 FD target 的噪声是不是主问题。</td>
+          </tr>
+          <tr>
+            <td><code>A2-mix</code></td>
+            <td>只加 interval mixture；residual 不 clip。</td>
+            <td>rank 4、数据、lr、endpoint=0、equal-time anchor。</td>
+            <td>训练区间和 one-step rollout 不匹配是不是主问题。</td>
+          </tr>
+          <tr>
+            <td><code>A2-core</code></td>
+            <td>interval mixture + residual clipping。</td>
+            <td>rank 4、数据、lr、endpoint=0、equal-time anchor。</td>
+            <td>两个低风险改动组合是否互补。</td>
+          </tr>
+          <tr>
+            <td><code>A2-endpoint</code></td>
+            <td>在 A2-core 上加小权重 endpoint consistency。</td>
+            <td>rank 4、数据不变。</td>
+            <td>one-step endpoint 约束是否改善长程末端修正。</td>
+          </tr>
+          <tr>
+            <td><code>A2-data</code></td>
+            <td>在已验证的 objective 上对 task 4/6/9 做 2x 到 3x 上采样。</td>
+            <td>模型容量不变。</td>
+            <td>弱项是否主要来自困难任务覆盖不足。</td>
+          </tr>
+          <tr>
+            <td><code>A2-capacity</code></td>
+            <td>clean retrain 使用 rank 8 和更多 LoRA target modules。</td>
+            <td>采用已经验证的 objective 和数据策略。</td>
+            <td>如果 A2-core 到平台，是否需要更大 action-body 容量。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>7.3 Interval Mixture</h3>
+      <p>A2 不再只用单一 random interval。推荐初始采样：</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Mode</th>
+            <th>概率</th>
+            <th>采样方式</th>
+            <th>作用</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>e2e</code></td>
+            <td>0.30</td>
+            <td>\(r=0,t=1\)，可选小 jitter：\(r\in[0,0.02]\)，\(t\in[0.98,1]\)。</td>
+            <td>直接训练 one-step rollout 所需的完整区间。</td>
+          </tr>
+          <tr>
+            <td><code>local</code></td>
+            <td>0.30</td>
+            <td>\(t\sim U(0.15,1)\)，\(\Delta=t-r\sim U(0.02,0.15)\)。</td>
+            <td>保持平均速度场在短区间接近 release flow matching。</td>
+          </tr>
+          <tr>
+            <td><code>random/any</code></td>
+            <td>0.40</td>
+            <td>随机 \(0\le r\lt t\le 1\)，最小 interval 仍保留。</td>
+            <td>学习真正的任意区间 MeanFlow，而不是只会 e2e 或 local。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        Equal-time anchor 继续保留，但它是额外的 diagonal velocity anchor；local interval 则是非零长度的短区间平均速度训练，两者互补。
+      </div>
+    </section>
+
+    <section id="loss">
+      <h2>8. A2-core Loss</h2>
+      <h3>8.1 Clipped Residual MeanFlow</h3>
+      <p>对任意 interval \(r\lt t\)，模型先预测：</p>
+      <div class="formula">
+        \[
+        F_t = u_\theta(x_t,r,t)
+        \]
+      </div>
+      <p>沿瞬时速度 \(v_t\) 后退一个小步：</p>
+      <div class="formula">
+        \[
+        x_{t-\Delta}=x_t-\Delta v_t
+        \]
+        \[
+        F_{t-\Delta}=u_\theta(x_{t-\Delta},r,t-\Delta)
+        \]
+      </div>
+      <p>构造积分残差：</p>
+      <div class="formula">
+        \[
+        R=\frac{(t-r)F_t-(t-\Delta-r)F_{t-\Delta}}{\Delta}-v_t
+        \]
+      </div>
+      <p>裁剪 residual 后生成 stopgrad target：</p>
+      <div class="formula">
+        \[
+        \tilde{R}=\mathrm{clip}(R,c)
+        \]
+        \[
+        y_{\mathrm{mf}}=\mathrm{sg}(F_t-\tilde{R})
+        \]
+        \[
+        L_{\mathrm{mf}}=\|F_t-y_{\mathrm{mf}}\|^2
+        \]
+      </div>
+      <p>固定点不变：当模型满足 MeanFlow 时 \(R=0\)，clipping 不起作用。clipping 只限制自举 target 在早期或 outlier batch 中的移动幅度。</p>
+
+      <h3>8.2 Equal-Time Anchor</h3>
+      <div class="formula">
+        \[
+        L_{\mathrm{eq}}=\|u_\theta(x_s,s,s)-v_s\|^2
+        \]
+      </div>
+      <p>这是对 release instantaneous velocity 的边界约束，不与 MeanFlow 矛盾。MeanFlow 在 \(r=t\) 的极限就应该退化到瞬时速度。</p>
+
+      <h3>8.3 Endpoint Consistency</h3>
+      <div class="formula">
+        \[
+        \hat{a}_r=x_t-(t-r)u_\theta(x_t,r,t)
+        \]
+        \[
+        L_{\mathrm{endpoint}}=\|\hat{a}_r-a_0\|^2
+        \]
+      </div>
+      <p>endpoint loss 不是标准 MeanFlow 必需项，但对 action one-step rollout 有现实意义。为了归因，A2-core 默认不加 endpoint；它只进入后续 <code>A2-endpoint</code> ablation。</p>
+
+      <h3>8.4 总 Loss</h3>
+      <div class="formula">
+        \[
+        L_{\mathrm{A2}}=
+        1.0L_{\mathrm{mf}}
+        +0.20L_{\mathrm{eq}}
+        +0.00L_{\mathrm{endpoint}}
+        \]
+      </div>
+      <p>其中 \(L_{\mathrm{eq}}\) 可按概率采样，例如 <code>equal_time_anchor_prob=0.25</code>。若 <code>A2-core</code> 明确优于 A1，再单独测试 <code>lambda_action_endpoint=0.02/0.05</code>。</p>
+    </section>
+
+    <section id="config">
+      <h2>9. A2-core 配置草案</h2>
+      <pre><code>model:
+  one_step_meanflow:
+    objective: finite_difference_residual
+    trainable_scope: conditioner_head_lora
+    freeze_video_expert: true
+    train_proprio_encoder: false
+    conditioner_mode: joint_delta
+
+    interval_sampling:
+      mode: mixture
+      e2e_prob: 0.30
+      local_prob: 0.30
+      random_prob: 0.40
+      min_interval: 0.02
+      local_delta_min: 0.02
+      local_delta_max: 0.15
+      e2e_jitter: 0.02
+
+    derivative_epsilon: 0.05
+    residual_clip:
+      enabled: true
+      mode: token_l2
+      max_norm: 2.0
+      log_clipped_fraction: true
+
+    equal_time_anchor_prob: 0.25
+
+    lora_rank: 4
+    lora_alpha: 4
+    lora_dropout: 0.0
+    lora_layers: all
+    lora_target_modules:
+      - self_attn.q
+      - self_attn.v
+      - self_attn.o
+      - cross_attn.q
+      - cross_attn.o
+      - ffn.2
+
+loss:
+  lambda_meanflow_target: 1.0
+  lambda_equal_time_velocity: 0.20
+  lambda_action_endpoint: 0.0
+  lambda_action_velocity: 0.0
+
+optimizer:
+  lr: 5e-5
+  warmup_steps: 1000
+  weight_decay: 0.0
+
+training:
+  max_steps: 70000
+  save_every: 5000
+  save_training_state: true</code></pre>
+      <div class="callout">
+        A2-core 刻意保持 A1 的 rank、LoRA target modules、数据和 endpoint 设置不变，只改变 interval sampling 与 residual clipping。
+        后续 <code>A2-capacity</code> 才尝试 rank 8、<code>cross_attn.v</code>、<code>ffn.0</code> 等扩容。
+      </div>
+    </section>
+
+    <section id="code-plan">
+      <h2>10. 代码改动计划</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>文件/模块</th>
+            <th>改动</th>
+            <th>验证</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>src/fastwam/models/wan22/fastwam_one_step_meanflow.py</code></td>
+            <td>新增 interval mixture sampler；返回 <code>interval_mode</code>，并支持 e2e/local/random 分组 loss logging。</td>
+            <td>固定 seed 下采样比例接近配置；所有 \(r,t\) 满足边界和最小 interval。</td>
+          </tr>
+          <tr>
+            <td><code>fastwam_one_step_meanflow.py</code></td>
+            <td>新增 residual target helper：计算 \(I_t\)、\(I_{t-\Delta}\)、residual、clipped residual 和 stopgrad target。</td>
+            <td>shape 与 action tensor 一致；no-grad 分支不回传到 previous prediction。</td>
+          </tr>
+          <tr>
+            <td><code>fastwam_one_step_meanflow.py</code></td>
+            <td>新增 residual clipping：支持 <code>token_l2</code> 和可选逐元素 clip；记录 clip fraction。</td>
+            <td>clip 关闭时行为退化到未裁剪 FD；clip 开启时 residual norm 受限。</td>
+          </tr>
+          <tr>
+            <td>Hydra config</td>
+            <td>新增 A2 YAML，不覆盖 A1；默认旧配置字段保持兼容。</td>
+            <td><code>--cfg job</code> resolve 通过；A1 config 不受影响。</td>
+          </tr>
+          <tr>
+            <td>Logging / TensorBoard / WandB</td>
+            <td>新增 mode-wise loss、residual norm、clip fraction、endpoint error、equal anchor loss。</td>
+            <td>smoke 100 steps 能实时看到曲线；无 NaN。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        代码实现时不加入 fake/adv branch，不引入负时间 domain label，也不改变 eval 推理接口。
+      </div>
+    </section>
+
+    <section id="attribution-run">
+      <h2>11. A1/A2 归因训练计划</h2>
+      <div class="callout">
+        起点要分两条线：<strong>A1-continue attribution</strong> 用 A1 70k 权重便宜筛选有效因素；
+        <strong>Release-clean validation</strong> 用 release flow-matching 权重重新训练，形成最终可比较结论。
+      </div>
+
+      <h3>11.1 两条训练线</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>训练线</th>
+            <th>起点</th>
+            <th>用途</th>
+            <th>限制</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>A1-continue attribution</code></td>
+            <td>A1 70k checkpoint。</td>
+            <td>快速回答 A1 差在哪里，以及 clipping、mixture、endpoint 哪个能修。</td>
+            <td>必须保持 LoRA rank 4、A1 target modules、数据分布和 eval set；必须有 <code>A1-continue-control</code>。</td>
+          </tr>
+          <tr>
+            <td><code>Release-clean validation</code></td>
+            <td>原始 release flow-matching checkpoint。</td>
+            <td>回答 A2 作为新 recipe 是否真的优于 A1。</td>
+            <td>用于最终结论；rank 8、expanded target modules、hard-task upweight 都只能在这里逐项加入。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>11.2 A1-continue 桥接实验</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>实验名</th>
+            <th>起点</th>
+            <th>只改什么</th>
+            <th>判读</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>A1-continue-control</code></td>
+            <td>A1 70k</td>
+            <td>继续用 A1 原 loss、random interval、endpoint=0。</td>
+            <td>排除“只是多训 10k/30k”带来的收益。</td>
+          </tr>
+          <tr>
+            <td><code>A1.1-codepath</code></td>
+            <td>A1 70k</td>
+            <td>走新代码路径，但关闭 mixture、residual clip、endpoint；配置等价 A1。</td>
+            <td>如果明显偏离 control，先查实现或 detach/sign，而不是解释为算法收益。</td>
+          </tr>
+          <tr>
+            <td><code>A1.2-residual-only</code></td>
+            <td>A1 70k</td>
+            <td>只把 target 写成 residual 形式，不开 clipping/mixture/endpoint。</td>
+            <td>验证 residual 形式是否与 A1 FD target 等价。</td>
+          </tr>
+          <tr>
+            <td><code>A1.3-clip</code></td>
+            <td>A1 70k</td>
+            <td>在 residual-only 上只加 residual clipping。</td>
+            <td>若改善，说明自举 FD target 噪声是主要瓶颈之一。</td>
+          </tr>
+          <tr>
+            <td><code>A1.4-mix</code></td>
+            <td>A1 70k</td>
+            <td>只加 interval mixture；不加 endpoint。建议同时保留一个 mix-only 和一个 mix+clip 版本。</td>
+            <td>若 mix-only 改善，说明训练区间和 rollout 区间不匹配是主因；若只有 mix+clip 改善，说明二者互补。</td>
+          </tr>
+          <tr>
+            <td><code>A1.5-endpoint</code></td>
+            <td>A1 70k</td>
+            <td>在胜出的最小 objective 上加 endpoint loss，先 <code>0.02</code>，再 <code>0.05</code>。</td>
+            <td>判断 endpoint consistency 是否真的改善长程末端修正。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>11.3 Release-clean 最终实验</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>实验名</th>
+            <th>起点</th>
+            <th>目的</th>
+            <th>备注</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>A1-r4-clean</code></td>
+            <td>release flow matching</td>
+            <td>在同一代码和评测环境下复现 A1。</td>
+            <td>如果已有 A1 70k 可作为参考，但正式对比最好同环境重跑或至少同脚本重评。</td>
+          </tr>
+          <tr>
+            <td><code>A2-r4-clean</code></td>
+            <td>release flow matching</td>
+            <td>验证 A1-continue 阶段胜出的最小 objective 是否从头训练也有效。</td>
+            <td>保持 rank 4 和 A1 modules，先不加 hard-task upweight。</td>
+          </tr>
+          <tr>
+            <td><code>A2-r4-data</code></td>
+            <td>release flow matching</td>
+            <td>单独测试 task 4/6/9 上采样。</td>
+            <td>只有在 A2-r4-clean 不退化后再做。</td>
+          </tr>
+          <tr>
+            <td><code>A2-r8-clean</code></td>
+            <td>release flow matching</td>
+            <td>单独测试 rank 8 / expanded LoRA target modules 的容量收益。</td>
+            <td>不要和 objective/data 改动同时首次引入。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>11.4 预算与推进</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>预算</th>
+            <th>运行对象</th>
+            <th>评测</th>
+            <th>推进规则</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>100 到 300 steps</td>
+            <td>所有新代码路径。</td>
+            <td>只看 NaN、shape、loss scale、clip fraction。</td>
+            <td>任何代码路径不稳定都先修实现。</td>
+          </tr>
+          <tr>
+            <td>10k continue</td>
+            <td><code>A1-continue-control</code>、<code>A1.3-clip</code>、<code>A1.4-mix</code>、<code>A1.4-mix+clip</code>。</td>
+            <td>LIBERO-10 task 4/6/9 + control tasks 2/3/5/7。</td>
+            <td>只保留 hard task 提升且 control 不退化的分支。</td>
+          </tr>
+          <tr>
+            <td>30k continue</td>
+            <td>10k 胜出的 1 到 2 个分支。</td>
+            <td>同上，可增加 trials。</td>
+            <td>确认不是短期波动。</td>
+          </tr>
+          <tr>
+            <td>70k clean</td>
+            <td><code>A1-r4-clean</code>、<code>A2-r4-clean</code>，再到 <code>A2-r4-data</code>/<code>A2-r8-clean</code>。</td>
+            <td>完整 LIBERO eval。</td>
+            <td>形成最终 recipe 结论。</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3>11.5 阶段性并行执行计划</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>类别</th>
+            <th>实验</th>
+            <th>执行方式</th>
+            <th>原因</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>可并行</td>
+            <td><code>A1-continue-control</code>、<code>A1.2-residual-only</code>、<code>A1.3-clip</code></td>
+            <td>各自 smoke 通过后，占用不同单卡跑 10k。</td>
+            <td>都从 A1 70k 权重出发，不依赖彼此 checkpoint；只改变一个 objective 因素。</td>
+          </tr>
+          <tr>
+            <td>可并行但稍后</td>
+            <td><code>A1.4-mix</code>、<code>A1.4-mix+clip</code></td>
+            <td>interval sampler 实现并 smoke 后再启动。</td>
+            <td>mix 引入采样分布变量，必须先保证 residual/clip 代码路径稳定。</td>
+          </tr>
+          <tr>
+            <td>半串行</td>
+            <td><code>A2-r4 combined</code></td>
+            <td>等待 10k attribution 结果后组合有效因素。</td>
+            <td>提前组合会让性能变化不可归因。</td>
+          </tr>
+          <tr>
+            <td>串行</td>
+            <td><code>A2-r8 clean</code>、<code>Release-clean validation</code></td>
+            <td>等待 r4 attribution/combined 结论后再跑。</td>
+            <td>容量、数据和 clean retrain 是最终 recipe 验证，不应污染 A1-continue 归因。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        当前执行顺序：保留正在运行的 <code>A1-continue-control</code>；先实现并 smoke <code>A1.2-residual-only</code>；
+        通过后启动 10k；再 smoke/启动 <code>A1.3-clip</code>。<code>A1.4-mix</code> 等 sampler 落地后再并行。
+      </div>
+      <div class="callout warn">
+        执行记录：<code>A1.3-clip</code> 的初始 <code>token_l2 max_norm=2.0</code> smoke 全程
+        <code>clip_fraction=0</code>，对当前 residual scale 过松。A1 attribution 阶段暂改为
+        <code>max_norm=0.25</code>，并记录 residual token norm；若 clip fraction 过高再调到 <code>0.5</code>。
+      </div>
+      <div class="callout warn">
+        归因阶段不要上 hard-task upweight，也不要改 LoRA rank、target modules、LR 策略。否则 A1-continue 的结果只能当 recipe search，不能解释原因。
+      </div>
+    </section>
+
+    <section id="training">
+      <h2>12. 训练与评测计划</h2>
+      <h3>12.1 数据</h3>
+      <p>A2-core 继续使用 full LIBERO no-noops four-suite 数据，且暂不改变采样权重。困难任务上采样只进入 <code>A2-data</code>，否则无法判断收益来自 objective 还是数据分布。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>数据策略</th>
+            <th>建议</th>
+            <th>理由</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Full four-suite</td>
+            <td>保留 <code>spatial/object/goal/libero_10</code> 全部数据。</td>
+            <td>避免窄任务 finetune 破坏 release 泛化。</td>
+          </tr>
+          <tr>
+            <td>Hard task upweight</td>
+            <td><span class="tag warn">A2-core 不启用</span>；仅在 <code>A2-data</code> 中把 LIBERO-10 task 4/6/9 采样权重设为 2x 到 3x。</td>
+            <td>A1 弱项确实集中在这些任务，但先不把数据变量混入 objective 归因。</td>
+          </tr>
+          <tr>
+            <td>Control tasks</td>
+            <td>保留 task 2/3/5/7 等 A1 强项作为反退化检查。</td>
+            <td>避免只优化弱项导致整体退步。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>12.2 阶段</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>阶段</th>
+            <th>规模</th>
+            <th>目标</th>
+            <th>通过条件</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Preflight</td>
+            <td>0 step / checkpoint load</td>
+            <td>确认 release zero-update 行为、冻结参数、LoRA 初始化。</td>
+            <td>可训练参数列表正确；eval config 能加载。</td>
+          </tr>
+          <tr>
+            <td>Smoke</td>
+            <td>100 到 300 steps</td>
+            <td>检查 loss、residual norm、clip fraction、memory。</td>
+            <td>无 NaN；clip fraction 不长期接近 100%。</td>
+          </tr>
+          <tr>
+            <td>Pilot</td>
+            <td>10k steps</td>
+            <td>分别跑 <code>A2-clip</code>、<code>A2-mix</code>、<code>A2-core</code>，每个实验只改计划中指定变量。</td>
+            <td>hard task mini-eval 与 control tasks 同时不低于 A1 同等早期 checkpoint。</td>
+          </tr>
+          <tr>
+            <td>Main</td>
+            <td>30k / 70k steps</td>
+            <td>只对 pilot 胜出的最小变体做完整训练；endpoint、data、capacity 逐项追加。</td>
+            <td>每次只能新增一个变量，LIBERO-10 task 4/6/9 改善且强项不显著退步。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="monitor">
+      <h2>13. 监控指标</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>指标</th>
+            <th>含义</th>
+            <th>异常解释</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>loss/mf_e2e</code>, <code>loss/mf_local</code>, <code>loss/mf_random</code></td>
+            <td>不同 interval mode 的主 loss。</td>
+            <td>e2e 长期明显高，说明部署区间仍难；local 高，说明 release velocity anchor 被破坏。</td>
+          </tr>
+          <tr>
+            <td><code>meanflow/residual_norm</code></td>
+            <td>finite-difference residual 大小。</td>
+            <td>长期上升或震荡说明自举 target 不稳。</td>
+          </tr>
+          <tr>
+            <td><code>meanflow/clip_fraction</code></td>
+            <td>被 residual clip 限制的 token 比例。</td>
+            <td>早期高可以接受；长期高于 30% 需要调小 lr、调大 interval 或放宽 clip。</td>
+          </tr>
+          <tr>
+            <td><code>loss/equal_time_velocity</code></td>
+            <td>local/equal-time anchor 是否保持 release instantaneous velocity。</td>
+            <td>如果主 loss 降但 anchor 升，模型可能从 release velocity 漂走。</td>
+          </tr>
+          <tr>
+            <td><code>loss/action_endpoint</code></td>
+            <td>one-step endpoint reconstruction 误差。</td>
+            <td>若 endpoint 降而 eval 退步，可能变成 shortcut overfit。</td>
+          </tr>
+          <tr>
+            <td><code>params/lora_norm</code>, <code>grads/action_head_norm</code></td>
+            <td>LoRA 与 head 的有效更新幅度。</td>
+            <td>长期接近 0 是容量未用起来；突然暴涨是目标或 lr 不稳。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="risks">
+      <h2>14. 风险与决策判据</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>风险</th>
+            <th>症状</th>
+            <th>处理</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Endpoint loss 与 MeanFlow 冲突</td>
+            <td>endpoint error 降低，但 e2e eval 或 long-horizon task 退步。</td>
+            <td>把 <code>lambda_action_endpoint</code> 从 0.05 降到 0.02 或 0。</td>
+          </tr>
+          <tr>
+            <td>Residual target 自举噪声</td>
+            <td>clip fraction 长期很高，loss 波动大。</td>
+            <td>降低 lr；增大 local interval 下界；使用更保守的 residual clip。</td>
+          </tr>
+          <tr>
+            <td>LoRA 容量不足</td>
+            <td>loss 到平台但 hard task 不改善，LoRA norm 很小或饱和。</td>
+            <td>clean retrain 增加 rank 或 target modules；不要在 rank 不兼容 checkpoint 上直接 resume。</td>
+          </tr>
+          <tr>
+            <td>Hard task 过采样导致遗忘</td>
+            <td>task 4/6/9 提升，但 task 2/3/5/7 或 spatial/goal 退步。</td>
+            <td>降低 hard upweight，或改成 pilot 阶段 only 的 curriculum。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout danger">
+        不以训练 loss 接近 0 作为成功标准。A2 的第一目标是 LIBERO-10 弱项提升，同时保持 A1 已经较强的 task 不退化。
+      </div>
+    </section>
+
+    <section id="refs">
+      <h2>15. 参考链接</h2>
+      <ul>
+        <li><a href="https://github.com/inclusionAI/TwinFlow">TwinFlow GitHub repository</a>：finite-difference residual、interval modes、fake/adv branch 的主要代码来源。</li>
+        <li><a href="https://github.com/Gsunshine/meanflow">Official MeanFlow GitHub repository</a>：显式 JVP MeanFlow 参考实现。</li>
+        <li><a href="https://github.com/primepake/splitmeanflow">SplitMeanFlow GitHub repository</a>：interval splitting consistency 与 equal-time/boundary anchor 参考。</li>
+        <li><a href="https://github.com/liduojia1/MeanFlowSE">MeanFlowSE GitHub repository</a>：finite-difference JVP、clipping 和 CFM/MeanFlow 混合训练参考。</li>
+        <li><a href="meanflow_action_lora_a1.html">FastWAM MeanFlow A1 Action-LoRA 实现归档</a>：A2 的直接前置方案。</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

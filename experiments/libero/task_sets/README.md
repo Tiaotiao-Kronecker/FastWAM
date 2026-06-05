@@ -19,6 +19,9 @@ runner does not parse comments in task files.
 - `libero_gap_probe_v1.txt`: the seven tasks with the largest positive
   `release_10 - release_1` gap in the 2026-05-12 baseline run. Use it as a
   quick diagnostic probe only.
+- `libero_a2_attribution_probe_v1.txt`: A2 Phase-1 attribution probe from the
+  2026-06-03 plan. It combines LIBERO-10 hard tasks 4/6/9 with control tasks
+  2/3/5/7, and is intended for A1-continue ablation readouts.
 
 ## Baseline Margins From Existing Runs
 
@@ -32,6 +35,7 @@ The numbers below come from:
 | `libero_long_official` | 10 | 92.20 | 94.60 | +2.40 |
 | `libero_long_horizon_v1` | 13 | 91.85 | 95.54 | +3.69 |
 | `libero_gap_probe_v1` | 7 | 89.71 | 96.57 | +6.86 |
+| `libero_a2_attribution_probe_v1` | 7 | TBD | TBD | TBD |
 
 Use `libero_long_official` for the clean long-suite readout. Use
 `libero_long_horizon_v1` when the full LIBERO average is too saturated to show

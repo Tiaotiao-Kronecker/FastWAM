@@ -1,0 +1,5 @@
+method,scope,total_successes,total_trials,avg_task_success_rate,libero_spatial_success_rate,libero_goal_success_rate,libero_10_subset_success_rate,delta_successes_vs_a1_step070,delta_avg_task_points_vs_a1_step070,notes
+a1_step070,overlap_gap_probe_7task,333,350,95.14,98.00,98.00,93.00,0,0.00,"A1 step070k long-horizon run restricted to the seven gap-probe overlap tasks"
+a1_step010_control,libero_gap_probe_v1,320,350,91.43,90.00,96.00,89.50,-13,-3.71,"serial GPU4 eval; policy_subprocess=false; failed_tasks empty"
+a1_step010_residual_only,libero_gap_probe_v1,320,350,91.43,98.00,98.00,86.50,-13,-3.71,"serial GPU4 eval; policy_subprocess=false; failed_tasks empty"
+a1_step010_residual_clip025,libero_gap_probe_v1,317,350,90.57,94.00,98.00,86.00,-16,-4.57,"GPU4 eval started before serial queue; policy_subprocess=true; failed_tasks empty"

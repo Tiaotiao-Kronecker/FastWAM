@@ -1,0 +1,8 @@
+task,a1_step070,a1_step010_control,a1_step010_residual_only,a1_step010_residual_clip025
+libero_goal_6,100.00,94.00,96.00,98.00
+libero_10_0,90.00,86.00,90.00,82.00
+libero_goal_5,96.00,98.00,100.00,98.00
+libero_10_2,98.00,94.00,90.00,88.00
+libero_spatial_3,98.00,90.00,98.00,94.00
+libero_10_8,84.00,78.00,66.00,80.00
+libero_10_3,100.00,100.00,100.00,94.00

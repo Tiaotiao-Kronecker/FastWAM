@@ -58,6 +58,19 @@ one_step_meanflow:
   objective: finite_difference
   random_timesteps: true
   equal_time_prob: 0.0
+  interval_sampling:
+    mode: random
+    e2e_prob: 0.0
+    local_prob: 0.0
+    random_prob: 1.0
+    min_interval: 0.0
+    local_delta_min: 0.02
+    local_delta_max: 0.15
+    e2e_jitter: 0.0
+  residual_clip:
+    enabled: false
+    mode: token_l2
+    max_norm: 0.0
   trainable_scope: action
   train_proprio_encoder: true
   conditioner_mode: additive_start

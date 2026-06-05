@@ -1,0 +1,31 @@
+[2026-06-04 21:21:25] Waiting for existing residual_clip025 session to finish: libero_residual_clip025_step010000_gap_manager_20260604
+[2026-06-04 21:54:25] Existing residual_clip025 session finished: libero_residual_clip025_step010000_gap_manager_20260604
+[2026-06-04 21:54:25] Starting serial eval for control on GPU(s): 4
+Started manager tmux session: libero_control_step010000_gap_serial_manager_20260604
+Worker tmux session name: libero_control_step010000_gap_serial_workers_20260604
+Output directory: ./evaluate_results/libero/a1_step010000_control_gap_probe_serial_v1_steps1_50trials_20260604
+Task config: libero_one_step_meanflow_a1_lora_eqanchor_2cam224_5e-5
+Task file: experiments/libero/task_sets/libero_gap_probe_v1.txt
+Checkpoint: ./runs/libero_one_step_meanflow_a1_lora_eqanchor_2cam224_5e-5/a1_continue_control_weights_from070k_10k_20260603/checkpoints/weights/step_010000.pt
+GPUs: 4, workers per GPU: 1, trials: 50, steps: 1
+Trial indices: null
+Save rollout video: false
+Save action trace: false
+Extra manager args:
+[2026-06-04 21:54:25] Waiting for manager to finish: libero_control_step010000_gap_serial_manager_20260604
+[2026-06-04 23:37:25] Serial eval for control finished with no manager-recorded failures.
+[2026-06-04 23:37:25] Starting serial eval for residual_only on GPU(s): 4
+Started manager tmux session: libero_residual_only_step010000_gap_serial_manager_20260604
+Worker tmux session name: libero_residual_only_step010000_gap_serial_workers_20260604
+Output directory: ./evaluate_results/libero/a1_step010000_residual_only_gap_probe_serial_v1_steps1_50trials_20260604
+Task config: libero_one_step_meanflow_a1_residual_only_lora_eqanchor_2cam224_5e-5
+Task file: experiments/libero/task_sets/libero_gap_probe_v1.txt
+Checkpoint: ./runs/libero_one_step_meanflow_a1_residual_only_lora_eqanchor_2cam224_5e-5/a1_2_residual_only_weights_from070k_10k_20260604/checkpoints/weights/step_010000.pt
+GPUs: 4, workers per GPU: 1, trials: 50, steps: 1
+Trial indices: null
+Save rollout video: false
+Save action trace: false
+Extra manager args:
+[2026-06-04 23:37:25] Waiting for manager to finish: libero_residual_only_step010000_gap_serial_manager_20260604
+[2026-06-05 01:41:26] Serial eval for residual_only finished with no manager-recorded failures.
+[2026-06-05 01:41:26] Serial eval queue finished.

@@ -13,6 +13,7 @@ NUM_INFERENCE_STEPS=${NUM_INFERENCE_STEPS:-1}
 SAVE_ROLLOUT_VIDEO=${SAVE_ROLLOUT_VIDEO:-false}
 SAVE_ACTION_TRACE=${SAVE_ACTION_TRACE:-false}
 TRIAL_INDICES=${TRIAL_INDICES:-null}
+EXTRA_MANAGER_ARGS=${EXTRA_MANAGER_ARGS:-}
 
 TASK_SET=${TASK_SET:-libero_long_horizon_v1}
 TASK_FILE=${TASK_FILE:-"experiments/libero/task_sets/${TASK_SET}.txt"}
@@ -71,7 +72,8 @@ exec $PYTHON_BIN experiments/libero/run_libero_manager.py \
     EVALUATION.output_dir=$OUTPUT_DIR \
     MULTIRUN.task_file=$TASK_FILE \
     MULTIRUN.num_gpus=$NUM_GPUS \
-    MULTIRUN.max_tasks_per_gpu=$WORKERS_PER_GPU"
+    MULTIRUN.max_tasks_per_gpu=$WORKERS_PER_GPU \
+    $EXTRA_MANAGER_ARGS"
 
 tmux new-session -d -s "$MANAGER_SESSION_NAME" -c "$ROOT_DIR" \
   "$MANAGER_CMD"
@@ -86,3 +88,4 @@ echo "GPUs: $GPUS, workers per GPU: $WORKERS_PER_GPU, trials: $NUM_TRIALS, steps
 echo "Trial indices: $TRIAL_INDICES"
 echo "Save rollout video: $SAVE_ROLLOUT_VIDEO"
 echo "Save action trace: $SAVE_ACTION_TRACE"
+echo "Extra manager args: $EXTRA_MANAGER_ARGS"

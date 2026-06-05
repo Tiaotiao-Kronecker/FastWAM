@@ -1,0 +1,77 @@
+# @package _global_
+
+defaults:
+  - override /data: libero_2cam
+  - override /model: fastwam_one_step_meanflow
+  - _self_
+
+# dataloading
+batch_size: 1
+num_workers: 0
+
+data:
+  train:
+    skip_padding_as_possible: true
+
+model:
+  mot_checkpoint_mixed_attn: true
+  one_step_meanflow:
+    objective: finite_difference_residual
+    random_timesteps: true
+    equal_time_prob: 0.0
+    interval_sampling:
+      mode: mixture
+      e2e_prob: 0.30
+      local_prob: 0.30
+      random_prob: 0.40
+      min_interval: 0.02
+      local_delta_min: 0.02
+      local_delta_max: 0.15
+      e2e_jitter: 0.02
+    residual_clip:
+      enabled: false
+      mode: token_l2
+      max_norm: 0.0
+    trainable_scope: conditioner_head_lora
+    train_proprio_encoder: false
+    conditioner_mode: joint_delta
+    freeze_video_expert: true
+    start_timestep: 0.0
+    end_timestep: null
+    derivative_epsilon: 0.05
+    equal_time_anchor_prob: 0.25
+    lora_rank: 4
+    lora_alpha: 4
+    lora_dropout: 0.0
+    lora_target_modules:
+      - self_attn.q
+      - self_attn.v
+      - self_attn.o
+      - cross_attn.q
+      - cross_attn.o
+      - ffn.2
+  loss:
+    lambda_meanflow_target: 1.0
+    lambda_equal_time_velocity: 0.1
+    lambda_action_velocity: 0.0
+    lambda_action_endpoint: 0.0
+
+# scheduler
+lr_scheduler_type: "cosine"
+learning_rate: 5e-5
+num_epochs: 1
+max_steps: 70000
+log_every: 10
+save_every: 5000
+eval_every: 0
+save_training_state: true
+
+# training
+gradient_accumulation_steps: 1
+weight_decay: 1e-2
+resume: ./checkpoints/fastwam_release/libero_uncond_2cam224.pt
+
+wandb:
+  enabled: false
+  group: meanflow-a1-attribution
+  name: a1.4-mix-lora4-jointdelta-eqanchor0.1

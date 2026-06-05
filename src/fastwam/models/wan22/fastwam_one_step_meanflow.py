@@ -21,6 +21,17 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
         meanflow_objective: str = "paper_jvp",
         meanflow_random_timesteps: bool = True,
         meanflow_equal_time_prob: float = 0.25,
+        meanflow_residual_clip_enabled: bool = False,
+        meanflow_residual_clip_mode: str = "token_l2",
+        meanflow_residual_clip_max_norm: float = 0.0,
+        meanflow_interval_sampling_mode: str = "random",
+        meanflow_interval_e2e_prob: float = 0.0,
+        meanflow_interval_local_prob: float = 0.0,
+        meanflow_interval_random_prob: float = 1.0,
+        meanflow_interval_min_interval: float = 0.0,
+        meanflow_interval_local_delta_min: float = 0.02,
+        meanflow_interval_local_delta_max: float = 0.15,
+        meanflow_interval_e2e_jitter: float = 0.0,
         meanflow_trainable_scope: str = "action",
         meanflow_train_proprio_encoder: bool = True,
         meanflow_conditioner_mode: str = "additive_start",
@@ -48,6 +59,17 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
         model.meanflow_objective = str(meanflow_objective).strip().lower()
         model.meanflow_random_timesteps = bool(meanflow_random_timesteps)
         model.meanflow_equal_time_prob = float(meanflow_equal_time_prob)
+        model.meanflow_residual_clip_enabled = bool(meanflow_residual_clip_enabled)
+        model.meanflow_residual_clip_mode = str(meanflow_residual_clip_mode).strip().lower()
+        model.meanflow_residual_clip_max_norm = float(meanflow_residual_clip_max_norm)
+        model.meanflow_interval_sampling_mode = str(meanflow_interval_sampling_mode).strip().lower()
+        model.meanflow_interval_e2e_prob = float(meanflow_interval_e2e_prob)
+        model.meanflow_interval_local_prob = float(meanflow_interval_local_prob)
+        model.meanflow_interval_random_prob = float(meanflow_interval_random_prob)
+        model.meanflow_interval_min_interval = float(meanflow_interval_min_interval)
+        model.meanflow_interval_local_delta_min = float(meanflow_interval_local_delta_min)
+        model.meanflow_interval_local_delta_max = float(meanflow_interval_local_delta_max)
+        model.meanflow_interval_e2e_jitter = float(meanflow_interval_e2e_jitter)
         model.meanflow_trainable_scope = str(meanflow_trainable_scope).strip().lower()
         model.meanflow_train_proprio_encoder = bool(meanflow_train_proprio_encoder)
         model.meanflow_conditioner_mode = str(meanflow_conditioner_mode).strip().lower()
@@ -186,6 +208,76 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
             sample.shape[0],
             *([1] * (sample.ndim - 1)),
         )
+
+    @staticmethod
+    def _masked_token_fraction(mask: torch.Tensor, action_is_pad: Optional[torch.Tensor]) -> float:
+        mask_float = mask.to(dtype=torch.float32)
+        if action_is_pad is None:
+            return float(mask_float.mean().detach().item())
+        valid = (~action_is_pad).to(device=mask.device, dtype=torch.float32)
+        valid_sum = valid.sum().clamp(min=1.0)
+        return float((mask_float * valid).sum().div(valid_sum).detach().item())
+
+    @staticmethod
+    def _masked_token_mean(values: torch.Tensor, action_is_pad: Optional[torch.Tensor]) -> float:
+        values_float = values.to(dtype=torch.float32)
+        if action_is_pad is None:
+            return float(values_float.mean().detach().item())
+        valid = (~action_is_pad).to(device=values.device, dtype=torch.float32)
+        valid_sum = valid.sum().clamp(min=1.0)
+        return float((values_float * valid).sum().div(valid_sum).detach().item())
+
+    @staticmethod
+    def _masked_token_max(values: torch.Tensor, action_is_pad: Optional[torch.Tensor]) -> float:
+        values_float = values.to(dtype=torch.float32)
+        if action_is_pad is None:
+            return float(values_float.max().detach().item())
+        valid = (~action_is_pad).to(device=values.device, dtype=torch.bool)
+        if not bool(valid.any().detach().item()):
+            return 0.0
+        return float(values_float.masked_select(valid).max().detach().item())
+
+    def _clip_meanflow_residual(
+        self,
+        residual: torch.Tensor,
+        action_is_pad: Optional[torch.Tensor],
+    ) -> tuple[torch.Tensor, dict[str, float]]:
+        clip_enabled = bool(getattr(self, "meanflow_residual_clip_enabled", False))
+        max_norm = float(getattr(self, "meanflow_residual_clip_max_norm", 0.0))
+        residual_rms = float(residual.detach().float().pow(2).mean().sqrt().item())
+        token_norm = residual.detach().float().norm(dim=-1)
+        metrics = {
+            "meanflow_residual_rms": residual_rms,
+            "meanflow_residual_token_norm_mean": self._masked_token_mean(token_norm, action_is_pad),
+            "meanflow_residual_token_norm_max": self._masked_token_max(token_norm, action_is_pad),
+            "meanflow_clip_fraction": 0.0,
+            "meanflow_clipped_residual_rms": residual_rms,
+        }
+        if not clip_enabled or max_norm <= 0.0:
+            return residual, metrics
+
+        mode = str(getattr(self, "meanflow_residual_clip_mode", "token_l2")).strip().lower()
+        if mode == "token_l2":
+            norm = token_norm.unsqueeze(-1)
+            scale = (max_norm / norm.clamp(min=1.0e-6)).clamp(max=1.0)
+            clipped = residual * scale.to(dtype=residual.dtype)
+            metrics["meanflow_clip_fraction"] = self._masked_token_fraction(
+                norm.squeeze(-1) > max_norm,
+                action_is_pad,
+            )
+        elif mode == "element":
+            clipped = residual.clamp(min=-max_norm, max=max_norm)
+            metrics["meanflow_clip_fraction"] = float(
+                (residual.detach().float().abs() > max_norm).float().mean().item()
+            )
+        else:
+            raise ValueError(
+                "`meanflow_residual_clip_mode` must be one of ['token_l2', 'element'], "
+                f"got {mode!r}."
+            )
+
+        metrics["meanflow_clipped_residual_rms"] = float(clipped.detach().float().pow(2).mean().sqrt().item())
+        return clipped, metrics
 
     def _set_meanflow_conditioner_trainable(self, trainable: bool) -> None:
         for module in self._meanflow_conditioner_modules():
@@ -380,26 +472,106 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
         *,
         equal_time_prob: Optional[float] = None,
         min_interval: float = 0.0,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, dict[str, float]]:
         steps = float(self.train_action_scheduler.num_train_timesteps)
         if not getattr(self, "meanflow_random_timesteps", True):
             timestep_end = self._build_one_step_action_timestep(batch_size=batch_size, dtype=dtype)
             timestep_start = self._build_meanflow_start_timestep(batch_size=batch_size, dtype=dtype)
             sigma_end = (timestep_end / steps).to(device=self.device, dtype=dtype)
             sigma_start = (timestep_start / steps).to(device=self.device, dtype=dtype)
-            return sigma_start, sigma_end
+            return sigma_start, sigma_end, {
+                "meanflow_interval_mode_e2e": 1.0,
+                "meanflow_interval_mode_local": 0.0,
+                "meanflow_interval_mode_random": 0.0,
+                "meanflow_equal_time_fraction": 0.0,
+            }
 
-        first = torch.rand((batch_size,), device=self.device, dtype=torch.float32)
-        second = torch.rand((batch_size,), device=self.device, dtype=torch.float32)
-        sigma_start = torch.minimum(first, second)
-        sigma_end = torch.maximum(first, second)
         min_interval = float(min_interval)
         if min_interval < 0.0 or min_interval >= 1.0:
             raise ValueError(f"`min_interval` must be in [0, 1), got {min_interval}.")
-        if min_interval > 0.0:
-            interval = min_interval + (1.0 - min_interval) * (sigma_end - sigma_start)
-            sigma_start = torch.minimum(sigma_start, 1.0 - interval)
-            sigma_end = sigma_start + interval
+
+        def sample_random_pair(pair_min_interval: float) -> tuple[torch.Tensor, torch.Tensor]:
+            first = torch.rand((batch_size,), device=self.device, dtype=torch.float32)
+            second = torch.rand((batch_size,), device=self.device, dtype=torch.float32)
+            start = torch.minimum(first, second)
+            end = torch.maximum(first, second)
+            pair_min_interval = float(pair_min_interval)
+            if pair_min_interval < 0.0 or pair_min_interval >= 1.0:
+                raise ValueError(f"`pair_min_interval` must be in [0, 1), got {pair_min_interval}.")
+            if pair_min_interval > 0.0:
+                interval = pair_min_interval + (1.0 - pair_min_interval) * (end - start)
+                start = torch.minimum(start, 1.0 - interval)
+                end = start + interval
+            return start, end
+
+        mode = str(getattr(self, "meanflow_interval_sampling_mode", "random")).strip().lower()
+        if mode in ("random", "uniform", "any"):
+            sigma_start, sigma_end = sample_random_pair(min_interval)
+            mode_metrics = {
+                "meanflow_interval_mode_e2e": 0.0,
+                "meanflow_interval_mode_local": 0.0,
+                "meanflow_interval_mode_random": 1.0,
+            }
+        elif mode == "mixture":
+            e2e_prob = float(getattr(self, "meanflow_interval_e2e_prob", 0.3))
+            local_prob = float(getattr(self, "meanflow_interval_local_prob", 0.3))
+            random_prob = float(getattr(self, "meanflow_interval_random_prob", 0.4))
+            probs = (e2e_prob, local_prob, random_prob)
+            if any(prob < 0.0 for prob in probs):
+                raise ValueError(f"`interval_sampling` probabilities must be non-negative, got {probs}.")
+            prob_total = sum(probs)
+            if prob_total <= 0.0:
+                raise ValueError("At least one `interval_sampling` probability must be positive.")
+            e2e_cutoff = e2e_prob / prob_total
+            local_cutoff = (e2e_prob + local_prob) / prob_total
+
+            configured_min_interval = float(getattr(self, "meanflow_interval_min_interval", 0.0))
+            random_min_interval = configured_min_interval if configured_min_interval > 0.0 else min_interval
+            sigma_start, sigma_end = sample_random_pair(random_min_interval)
+            draw = torch.rand((batch_size,), device=self.device, dtype=torch.float32)
+            e2e_mask = draw < e2e_cutoff
+            local_mask = (draw >= e2e_cutoff) & (draw < local_cutoff)
+            random_mask = ~(e2e_mask | local_mask)
+
+            e2e_jitter = float(getattr(self, "meanflow_interval_e2e_jitter", 0.0))
+            if e2e_jitter < 0.0 or e2e_jitter >= 0.5:
+                raise ValueError(f"`interval_sampling.e2e_jitter` must be in [0, 0.5), got {e2e_jitter}.")
+            if bool(e2e_mask.any().detach().item()):
+                e2e_start = e2e_jitter * torch.rand((batch_size,), device=self.device, dtype=torch.float32)
+                e2e_end = 1.0 - e2e_jitter * torch.rand((batch_size,), device=self.device, dtype=torch.float32)
+                sigma_start = torch.where(e2e_mask, e2e_start, sigma_start)
+                sigma_end = torch.where(e2e_mask, e2e_end, sigma_end)
+
+            local_min = float(getattr(self, "meanflow_interval_local_delta_min", 0.02))
+            local_max = float(getattr(self, "meanflow_interval_local_delta_max", 0.15))
+            if local_min <= 0.0 or local_min >= 1.0:
+                raise ValueError(f"`interval_sampling.local_delta_min` must be in (0, 1), got {local_min}.")
+            if local_max <= local_min or local_max > 1.0:
+                raise ValueError(
+                    "`interval_sampling.local_delta_max` must be in "
+                    f"({local_min}, 1], got {local_max}."
+                )
+            if bool(local_mask.any().detach().item()):
+                local_delta = local_min + (local_max - local_min) * torch.rand(
+                    (batch_size,),
+                    device=self.device,
+                    dtype=torch.float32,
+                )
+                local_start = (1.0 - local_delta) * torch.rand((batch_size,), device=self.device, dtype=torch.float32)
+                local_end = local_start + local_delta
+                sigma_start = torch.where(local_mask, local_start, sigma_start)
+                sigma_end = torch.where(local_mask, local_end, sigma_end)
+
+            mode_metrics = {
+                "meanflow_interval_mode_e2e": float(e2e_mask.float().mean().detach().item()),
+                "meanflow_interval_mode_local": float(local_mask.float().mean().detach().item()),
+                "meanflow_interval_mode_random": float(random_mask.float().mean().detach().item()),
+            }
+        else:
+            raise ValueError(
+                "`interval_sampling.mode` must be one of ['random', 'uniform', 'any', 'mixture'], "
+                f"got {mode!r}."
+            )
 
         if equal_time_prob is None:
             equal_time_prob = float(getattr(self, "meanflow_equal_time_prob", 0.0))
@@ -410,8 +582,11 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
         if equal_time_prob > 0.0:
             equal_mask = torch.rand((batch_size,), device=self.device) < equal_time_prob
             sigma_start = torch.where(equal_mask, sigma_end, sigma_start)
+            mode_metrics["meanflow_equal_time_fraction"] = float(equal_mask.float().mean().detach().item())
+        else:
+            mode_metrics["meanflow_equal_time_fraction"] = 0.0
 
-        return sigma_start.to(dtype=dtype), sigma_end.to(dtype=dtype)
+        return sigma_start.to(dtype=dtype), sigma_end.to(dtype=dtype), mode_metrics
 
     def _build_video_pre(
         self,
@@ -571,7 +746,7 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
         )
 
         noise_action = torch.randn_like(action)
-        sigma_start, sigma_end = self._sample_meanflow_sigma_pair(
+        sigma_start, sigma_end, interval_metrics = self._sample_meanflow_sigma_pair(
             batch_size=batch_size,
             dtype=action.dtype,
         )
@@ -640,6 +815,7 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
             "pred_mean_velocity_rms": float(pred_mean_velocity.detach().float().pow(2).mean().sqrt().item()),
             "target_meanflow_rms": float(meanflow_target.detach().float().pow(2).mean().sqrt().item()),
         }
+        loss_dict.update(interval_metrics)
 
         loss_equal_time_velocity, anchor_metrics = self._maybe_equal_time_anchor_loss(
             video_pre=video_pre,
@@ -683,7 +859,13 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
 
         return loss_total, loss_dict
 
-    def _training_loss_finite_difference(self, sample, tiled: bool = False):
+    def _training_loss_finite_difference(
+        self,
+        sample,
+        tiled: bool = False,
+        *,
+        residual_target: bool = False,
+    ):
         inputs = self.build_inputs(sample, tiled=tiled)
         input_latents = inputs["input_latents"]
         batch_size = input_latents.shape[0]
@@ -702,7 +884,7 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
         )
 
         noise_action = torch.randn_like(action)
-        sigma_start, sigma_end = self._sample_meanflow_sigma_pair(
+        sigma_start, sigma_end, interval_metrics = self._sample_meanflow_sigma_pair(
             batch_size=batch_size,
             dtype=torch.float32,
             equal_time_prob=0.0,
@@ -743,6 +925,8 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
         if torch.any(eps_actual <= 0):
             raise ValueError("Mean-flow finite-difference epsilon collapsed to zero.")
         prev_action = noisy_action - eps_actual.view(batch_size, *([1] * (action.ndim - 1))) * target_action_velocity
+        interval = self._interval_view(timestep_start, timestep_end, action)
+        residual_metrics = {}
         with torch.no_grad():
             pred_prev_mean_velocity = self._predict_meanflow_action_velocity(
                 video_pre=video_pre,
@@ -755,13 +939,13 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
             dudt = (
                 pred_mean_velocity.detach() - pred_prev_mean_velocity
             ) / eps_actual.view(batch_size, *([1] * (action.ndim - 1)))
-            meanflow_target = target_action_velocity - self._interval_view(
-                timestep_start,
-                timestep_end,
-                action,
-            ) * dudt
+            if residual_target:
+                residual = pred_mean_velocity.detach() + interval * dudt - target_action_velocity
+                clipped_residual, residual_metrics = self._clip_meanflow_residual(residual, action_is_pad)
+                meanflow_target = pred_mean_velocity.detach() - clipped_residual
+            else:
+                meanflow_target = target_action_velocity - interval * dudt
 
-        interval = self._interval_view(timestep_start, timestep_end, action)
         pred_action_endpoint = noisy_action - interval * pred_mean_velocity
 
         loss_meanflow_target = self._masked_action_mse(
@@ -799,6 +983,8 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
             "pred_mean_velocity_rms": float(pred_mean_velocity.detach().float().pow(2).mean().sqrt().item()),
             "target_meanflow_rms": float(meanflow_target.detach().float().pow(2).mean().sqrt().item()),
         }
+        loss_dict.update(interval_metrics)
+        loss_dict.update(residual_metrics)
         loss_equal_time_velocity, anchor_metrics = self._maybe_equal_time_anchor_loss(
             video_pre=video_pre,
             action=action,
@@ -820,7 +1006,10 @@ class FastWAMOneStepMeanFlow(FastWAMOneStepAction):
             return self._training_loss_paper_jvp(sample, tiled=tiled)
         if objective == "finite_difference":
             return self._training_loss_finite_difference(sample, tiled=tiled)
+        if objective == "finite_difference_residual":
+            return self._training_loss_finite_difference(sample, tiled=tiled, residual_target=True)
         raise ValueError(
-            "`meanflow_objective` must be one of ['paper_jvp', 'finite_difference'], "
+            "`meanflow_objective` must be one of ['paper_jvp', 'finite_difference', "
+            "'finite_difference_residual'], "
             f"got {objective!r}."
         )

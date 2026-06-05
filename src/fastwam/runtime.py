@@ -535,6 +535,26 @@ def create_fastwam_one_step_meanflow(
         one_step_meanflow = {}
     if not isinstance(one_step_meanflow, dict):
         raise ValueError(f"`one_step_meanflow` must be dict-like, got {type(one_step_meanflow)}")
+    residual_clip = one_step_meanflow.get("residual_clip", {})
+    if isinstance(residual_clip, DictConfig):
+        residual_clip = OmegaConf.to_container(residual_clip, resolve=True)
+    if residual_clip is None:
+        residual_clip = {}
+    if isinstance(residual_clip, bool):
+        residual_clip = {"enabled": residual_clip}
+    if not isinstance(residual_clip, dict):
+        raise ValueError(f"`one_step_meanflow.residual_clip` must be dict-like, got {type(residual_clip)}")
+    interval_sampling = one_step_meanflow.get("interval_sampling", {})
+    if isinstance(interval_sampling, DictConfig):
+        interval_sampling = OmegaConf.to_container(interval_sampling, resolve=True)
+    if interval_sampling is None:
+        interval_sampling = {}
+    if isinstance(interval_sampling, str):
+        interval_sampling = {"mode": interval_sampling}
+    if not isinstance(interval_sampling, dict):
+        raise ValueError(
+            f"`one_step_meanflow.interval_sampling` must be dict-like, got {type(interval_sampling)}"
+        )
 
     return FastWAMOneStepMeanFlow.from_wan22_pretrained(
         device=device,
@@ -568,6 +588,21 @@ def create_fastwam_one_step_meanflow(
         meanflow_objective=one_step_meanflow.get("objective", "paper_jvp"),
         meanflow_random_timesteps=bool(one_step_meanflow.get("random_timesteps", True)),
         meanflow_equal_time_prob=float(one_step_meanflow.get("equal_time_prob", 0.25)),
+        meanflow_residual_clip_enabled=bool(residual_clip.get("enabled", False)),
+        meanflow_residual_clip_mode=residual_clip.get("mode", "token_l2"),
+        meanflow_residual_clip_max_norm=float(residual_clip.get("max_norm", 0.0)),
+        meanflow_interval_sampling_mode=interval_sampling.get("mode", "random"),
+        meanflow_interval_e2e_prob=float(interval_sampling.get("e2e_prob", 0.0)),
+        meanflow_interval_local_prob=float(interval_sampling.get("local_prob", 0.0)),
+        meanflow_interval_random_prob=float(interval_sampling.get("random_prob", 1.0)),
+        meanflow_interval_min_interval=float(interval_sampling.get("min_interval", 0.0)),
+        meanflow_interval_local_delta_min=float(
+            interval_sampling.get("local_delta_min", interval_sampling.get("local_min_interval", 0.02))
+        ),
+        meanflow_interval_local_delta_max=float(
+            interval_sampling.get("local_delta_max", interval_sampling.get("local_max_interval", 0.15))
+        ),
+        meanflow_interval_e2e_jitter=float(interval_sampling.get("e2e_jitter", 0.0)),
         meanflow_trainable_scope=one_step_meanflow.get("trainable_scope", "action"),
         meanflow_train_proprio_encoder=bool(one_step_meanflow.get("train_proprio_encoder", True)),
         meanflow_conditioner_mode=one_step_meanflow.get("conditioner_mode", "additive_start"),
