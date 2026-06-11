@@ -142,15 +142,43 @@ L_A2 = 1.0 * L_mf
 
 ### 当前执行顺序
 
-1. 保留正在运行的 `A1-continue-control`。
-2. 实现并 smoke `A1.2-residual-only`；通过后在空闲单卡启动 10k。
-3. 实现并 smoke `A1.3-clip`；若 residual-only 前 100 step 稳定，可并行启动 10k。
-4. `A1.4-mix` 等 sampler 实现后再并行，不与 endpoint 或数据上采样混开。
+资源空出后切回严格 full-state continuation 协议，不再把 weight-only finetune 结果当成 A1 70k 续训结论。
+
+1. 使用 A1 70k 的完整 DeepSpeed/Accelerate state 跑 `A1-full-continue-control`，先 smoke 到 `70100/70300`，通过后跑到 `80000`。
+2. `A1.2-full-residual-only` 只保留 100 到 300 step sanity，用来检查 residual 代码路径，不作为性能候选长跑。
+3. `A1.4-full-mix` 作为主要候选；interval sampler 实现并 smoke 后从 full state 跑到 `80000`。
+4. `A1.4-full-mix-clip` 只在 mix smoke 中 residual norm 过大或训练不稳时加入。
+5. `A1.3-full-clip0.25` 暂不单独投入 10k full-state 续训。
 
 执行记录：
 
 - `A1.3-clip` 初始 `token_l2 max_norm=2.0` smoke 全程 `clip_fraction=0`，说明阈值对当前 residual scale 过松。
 - A1 attribution 阶段将 `A1.3-clip` 暂定为 `token_l2 max_norm=0.25`，并新增 residual token norm 日志；若 smoke clip fraction 过高再调到 `0.5`。
+
+## 10k weight-only 结果后的缩减计划
+
+H200-2 上已完成的三支 `step_010000.pt` 来自 `weights/step_070000.pt` 的 weight-only finetune，不是恢复 optimizer/scheduler/random state 的严格续训。它们不能替代 full-state continuation，但可以用于减少下一轮候选。
+
+重合 7 个 gap-probe task 上：
+
+| 方案 | Overall | LIBERO-10 | 判读 |
+| --- | ---: | ---: | --- |
+| A1 70k overlap baseline | 95.14% | 93.00% | 70k 参考值。 |
+| control +10k | 91.43% | 89.50% | weight-only 多训本身退化，说明 optimizer/scheduler reset 是强干扰。 |
+| residual-only +10k | 91.43% | 86.50% | 没有优于 control，且 LIBERO-10 更差；后续只作为代码路径 sanity。 |
+| clip0.25 +10k | 90.57% | 86.00% | 单独 clip 没有收益；不再单独投入 full-state 10k。 |
+
+下一轮 full-state continuation 保留：
+
+| 优先级 | 方案 | 是否恢复完整 A1 70k state | 步数 | 状态 |
+| --- | --- | --- | --- | --- |
+| 必跑 | `A1-full-continue-control` | 是，使用 `checkpoints/state/step_070000` | `70000 -> 80000` | 资源 OK 后首先启动。 |
+| 只 smoke | `A1.2-full-residual-only` | 是 | `70000 -> 70100/70300` | 检查 residual 代码路径，不作为性能候选。 |
+| 主候选 | `A1.4-full-mix` | 是 | `70000 -> 80000` | interval sampler 实现并 smoke 后启动。 |
+| 条件候选 | `A1.4-full-mix-clip` | 是 | `70000 -> 80000` | 仅当 mix smoke 不稳或 residual norm 过大时加入。 |
+| 暂缓 | `A1.3-full-clip0.25` | 是 | 暂不跑 10k | 现有 10k weight-only 结果不支持单独投入资源。 |
+
+Full-state continuation 的 `max_steps` 使用全局 step：`80000` 表示从 `70000` 续训 10k，不是从头训练 80k。启动方式必须匹配 A1 70k 的 ZeRO/DeepSpeed state；优先使用同等 4-GPU DeepSpeed/Accelerate 配置，避免再次触发单进程加载 ZeRO state 失败。
 
 ## 监控指标
 

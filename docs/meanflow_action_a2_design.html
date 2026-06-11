@@ -921,8 +921,9 @@ training:
         </tbody>
       </table>
       <div class="callout">
-        当前执行顺序：保留正在运行的 <code>A1-continue-control</code>；先实现并 smoke <code>A1.2-residual-only</code>；
-        通过后启动 10k；再 smoke/启动 <code>A1.3-clip</code>。<code>A1.4-mix</code> 等 sampler 落地后再并行。
+        修订后的当前执行顺序：资源空出后先使用 A1 70k 的完整 DeepSpeed/Accelerate state 做
+        <code>A1-full-continue-control</code>；<code>A1.2-residual-only</code> 只保留短 smoke/sanity；
+        主候选优先转向 <code>A1.4-full-mix</code>。<code>A1.3-clip0.25</code> 不再作为单独 10k 主候选。
       </div>
       <div class="callout warn">
         执行记录：<code>A1.3-clip</code> 的初始 <code>token_l2 max_norm=2.0</code> smoke 全程
@@ -931,6 +932,107 @@ training:
       </div>
       <div class="callout warn">
         归因阶段不要上 hard-task upweight，也不要改 LoRA rank、target modules、LR 策略。否则 A1-continue 的结果只能当 recipe search，不能解释原因。
+      </div>
+
+      <h3>11.6 10k weight-only 结果后的缩减计划</h3>
+      <p>
+        H200-2 上已完成的三支 <code>step_010000.pt</code> 评测来自
+        <code>weights/step_070000.pt</code> 的 weight-only fine-tune，不是恢复 optimizer/scheduler/random state 的严格续训。
+        因此这些结果不能替代 full-state continuation，但可以用于减少下一轮候选。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>结果</th>
+            <th>Overall</th>
+            <th>LIBERO-10</th>
+            <th>判读</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>A1 70k overlap baseline</td>
+            <td>95.14%</td>
+            <td>93.00%</td>
+            <td>重合 7 个 gap-probe task 上的参考值。</td>
+          </tr>
+          <tr>
+            <td><code>control +10k</code></td>
+            <td>91.43%</td>
+            <td>89.50%</td>
+            <td>weight-only 多训本身退化，说明 optimizer/scheduler reset 是强干扰。</td>
+          </tr>
+          <tr>
+            <td><code>residual-only +10k</code></td>
+            <td>91.43%</td>
+            <td>86.50%</td>
+            <td>没有优于 control，且 LIBERO-10 更差；后续只作为代码路径 sanity。</td>
+          </tr>
+          <tr>
+            <td><code>clip0.25 +10k</code></td>
+            <td>90.57%</td>
+            <td>86.00%</td>
+            <td>单独 clip 没有收益；不再单独投入 full-state 10k。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        下一轮 full-state continuation 只保留两个主候选：<code>A1-full-continue-control</code> 和
+        <code>A1.4-full-mix</code>。<code>A1.2-full-residual-only</code> 只跑 100 到 300 step sanity；
+        <code>A1.4-full-mix-clip</code> 只在 mix smoke 显示 residual norm 过大或训练不稳时加入。
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>优先级</th>
+            <th>方案</th>
+            <th>是否恢复完整 A1 70k state</th>
+            <th>步数</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>必跑</td>
+            <td><code>A1-full-continue-control</code></td>
+            <td>是；使用 <code>checkpoints/state/step_070000</code></td>
+            <td><code>70000 -> 80000</code></td>
+            <td>资源 OK 后首先启动。</td>
+          </tr>
+          <tr>
+            <td>只 smoke</td>
+            <td><code>A1.2-full-residual-only</code></td>
+            <td>是</td>
+            <td><code>70000 -> 70100/70300</code></td>
+            <td>检查 residual 代码路径，不作为性能候选。</td>
+          </tr>
+          <tr>
+            <td>主候选</td>
+            <td><code>A1.4-full-mix</code></td>
+            <td>是</td>
+            <td><code>70000 -> 80000</code></td>
+            <td>interval sampler 实现并 smoke 后启动。</td>
+          </tr>
+          <tr>
+            <td>条件候选</td>
+            <td><code>A1.4-full-mix-clip</code></td>
+            <td>是</td>
+            <td><code>70000 -> 80000</code></td>
+            <td>仅当 mix smoke 不稳或 residual norm 过大时加入。</td>
+          </tr>
+          <tr>
+            <td>暂缓</td>
+            <td><code>A1.3-full-clip0.25</code></td>
+            <td>是</td>
+            <td>暂不跑 10k</td>
+            <td>现有 10k weight-only 结果不支持单独投入资源。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        Full-state continuation 的 <code>max_steps</code> 使用全局 step：<code>80000</code> 表示从
+        <code>70000</code> 续训 10k，不是从头训练 80k。启动方式必须匹配 A1 70k 的 ZeRO/DeepSpeed state；
+        优先使用同等 4-GPU DeepSpeed/Accelerate 配置，避免再次触发单进程加载 ZeRO state 失败。
       </div>
     </section>
 
