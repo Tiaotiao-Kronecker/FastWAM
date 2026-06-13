@@ -1,0 +1,6 @@
+checkpoint,run_dir,libero_spatial_3,libero_goal_5,libero_goal_6,libero_10_0,libero_10_2,libero_10_3,libero_10_8,total_successes,total_trials,overall_success_rate
+A1 step050000,a1_step050000_strict_gap_probe_v1_steps1_50trials_gpu7_20260612_144300,48,48,44,43,50,50,36,319,350,91.14285714285715
+A1 step055000,a1_step055000_strict_gap_probe_v1_steps1_50trials_gpu7_20260612_144300,47,49,50,42,49,50,36,323,350,92.28571428571428
+A1 step060000,a1_step060000_strict_gap_probe_v1_steps1_50trials_gpu7_20260612_144300,49,48,49,44,49,49,39,327,350,93.42857142857143
+A1 step065000,a1_step065000_strict_gap_probe_v1_steps1_50trials_gpu7_20260612_144300,50,48,49,44,49,49,38,327,350,93.42857142857143
+A1 step070000,a1_step070000_strict_gap_probe_v1_steps1_50trials_gpu7_20260612_144300,49,48,50,45,49,50,42,333,350,95.14285714285714

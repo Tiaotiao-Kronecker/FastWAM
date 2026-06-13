@@ -1,0 +1,7 @@
+weight,run_dir,num_inference_steps,libero_spatial_3,libero_goal_5,libero_goal_6,libero_10_0,libero_10_2,libero_10_3,libero_10_8,total_successes,total_trials,overall_success_rate
+release1,release1_strict_gap_probe_v1_steps1_50trials_gpu7_20260611_190935,1,47,46,43,43,45,46,44,314,350,89.71428571428571
+release10,release10_strict_gap_probe_v1_steps10_50trials_gpu7_20260611_190935,10,49,50,49,48,48,48,46,338,350,96.57142857142857
+A1 70k,a1_step070000_strict_gap_probe_v1_steps1_50trials_gpu7_20260611_190935,1,49,48,50,45,49,50,42,333,350,95.14285714285714
+A1 full-control 80k,a1_full_control_step080000_strict_gap_probe_v1_steps1_50trials_gpu7_20260611_190935,1,48,47,50,41,50,50,38,324,350,92.57142857142857
+A1.2 full residual-only 70.3k,a1_2_full_residual_only_step070300_strict_gap_probe_v1_steps1_50trials_gpu7_20260611_190935,1,50,48,49,44,49,47,39,326,350,93.14285714285714
+A1.3 full clip0.25 70.3k,a1_3_full_clip025_step070300_strict_gap_probe_v1_steps1_50trials_gpu7_20260611_190935,1,49,48,49,42,50,49,42,329,350,94.0
